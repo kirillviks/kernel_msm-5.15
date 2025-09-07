@@ -29,8 +29,6 @@ jobs:
             kpm_patch_url: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
             extra_patches:
               - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
-              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-Revert-ANDROID-16K-Allocate-pad-vma-on-the-stack"
-              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0002-Revert-ANDROID-16K-Don-t-copy-data-vma-for-maps-smap"
           - name: "CLO"
             dir: "common_clo"
             repo_name: "clo"
