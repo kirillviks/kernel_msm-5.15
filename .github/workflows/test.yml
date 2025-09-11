@@ -36,7 +36,7 @@ jobs:
             defconfig: "gki_defconfig"
             local_version: "-YASK-CLO"
             output_name: "Image.clo.ksu"
-            kmp_patch_url: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+            kpm_patch_url: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
             enable_ksu: true
             extra_patches:
               - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
