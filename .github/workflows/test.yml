@@ -1,159 +1,188 @@
-name: "Test Build"
+name: "Build YASK TEST"
 
 env:
   OUT_DIR: "out"
   KERNEL_VERSION: "5.15"
   ANDROID_VERSION: "13"
-  SUSFS_BRANCH: "gki-android13-5.15"
 
 on:
   workflow_dispatch:
-    inputs:
-      kernelSourceURL:
-        description: "Kernel source URL"
-        required: true
-        type: string
-        default: "https://github.com/topnotchfreaks/kernel_msm-5.15"
-      kernelBranch:
-        description: "Kernel branch"
-        required: false
-        type: string
-        default: "codelinaro"
-      kernelDevice:
-        description: "Device (used for defconfig)"
-        required: true
-        type: string
-        default: "gki"
-      localVersion:
-        description: "Custom localversion name (e.g., -mybuild)"
-        required: false
-        type: string
-        default: ""
-      buildKSU:
-        description: "Build KSU variant?"
-        required: false
-        type: boolean
-        default: true
-      ltoMode:
-        description: "Choose LTO mode"
-        required: true
-        default: "thin"
-        type: choice
-        options:
-          - "thin"
-          - "full"
 
 jobs:
-  Build-Kernel:
-    name: "🚀 Build 5.15 Kernel"
+  build-kernels:
+    name: "🐎 Build YASK ${{ matrix.kernel.name }} kernel"
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        variant: ${{ fromJSON(inputs.buildKSU == true && '["noksu", "ksu"]' || '["noksu"]') }}
+        kernel:
+          - name: "GKI"
+            dir: "common_gki"
+            repo_name: "common"
+            repo_url: "https://android.googlesource.com/kernel/common"
+            branch: "android13-5.15-lts"
+            defconfig: "gki_defconfig"
+            local_version: "-YASK-GKI"
+            output_name: "Image.gki.ksu"
+            kpm_patch_url: "https://raw.githubusercontent.com/ShirkNeko/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+            enable_ksu: true
+            extra_patches:
+              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
+          - name: "CLO"
+            dir: "common_clo"
+            repo_name: "clo"
+            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
+            branch: "kernel.lnx.5.15.r16-rel"
+            defconfig: "gki_defconfig"
+            local_version: "-YASK-CLO"
+            output_name: "Image.clo.ksu"
+            kmp_patch_url: "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux"
+            enable_ksu: true
+            extra_patches:
+              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
+          - name: "GKI-NoKSU"
+            dir: "common_gki_noksu"
+            repo_name: "common"
+            repo_url: "https://android.googlesource.com/kernel/common"
+            branch: "android13-5.15-lts"
+            defconfig: "gki_defconfig"
+            local_version: "-YASK-GKI-NoKSU"
+            output_name: "Image.gki.noksu"
+            enable_ksu: false
+            extra_patches:
+              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
+          - name: "CLO-NoKSU"
+            dir: "common_clo_noksu"
+            repo_name: "clo"
+            repo_url: "https://git.codelinaro.org/clo/la/kernel/msm-5.15.git"
+            branch: "kernel.lnx.5.15.r16-rel"
+            defconfig: "gki_defconfig"
+            local_version: "-YASK-CLO-NoKSU"
+            output_name: "Image.clo.noksu"
+            enable_ksu: false
+            extra_patches:
+              - "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch"
+
     env:
-      kernelDir: common_${{ github.event.inputs.kernelDevice }}
-      kernelName: common
-      DEFCONFIG_NAME: ${{ github.event.inputs.kernelDevice }}_defconfig
+      KERNEL_LOC_DIR: ${{ matrix.kernel.dir }}
+      KERNEL_NAME: ${{ matrix.kernel.repo_name }}
+      KERNEL_REPO: ${{ matrix.kernel.repo_url }}
+      KERNEL_BRANCH: ${{ matrix.kernel.branch }}
+      DEFCONFIG_NAME: ${{ matrix.kernel.defconfig }}
+      LOCAL_VERSION: ${{ matrix.kernel.local_version }}
+      OUTPUT_NAME: ${{ matrix.kernel.output_name }}
       WORK_DIR: ${{ github.workspace }}
 
     steps:
       - name: "✨ Setup workspace"
         run: |
-          mkdir -p $kernelDir
+          mkdir -p ${{ env.KERNEL_LOC_DIR }}
           echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2
 
-      - name: "🌟 Clone kernel source"
-        working-directory: ./${{ env.kernelDir }}
-        run: |
-          git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
-            ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
-
-      - name: "📥 Initialize repo"
-        working-directory: ${{ env.WORK_DIR}}
-        run: |
-          repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
-          repo sync --optimized-fetch --prune -j8
-          
-          rm -rf .repo
-          rm -rf common
-
-          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
-          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
-          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
-          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
-
-          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
-          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
-          rm -rf prebuilts/clang/host/linux-x86/clang-stable
-          
-          sed -i \
-           -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
-           -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
-           ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.constants
-          
-          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
-
-      - name: "📐 Setup build environment"
-        run: |
-          # Setup swap based on LTO mode
-          if [ "${{ github.event.inputs.ltoMode }}" = "full" ]; then
-            SWAP_SIZE=10G
-          else
-            SWAP_SIZE=4G
-          fi
-          sudo fallocate -l $SWAP_SIZE /swapfile
+          sudo fallocate -l 8G /swapfile
           sudo chmod 600 /swapfile
           sudo mkswap /swapfile
           sudo swapon /swapfile
           echo "vm.swappiness=60" | sudo tee -a /etc/sysctl.conf
           sudo sysctl -p
 
-      - name: "⚙️ Configure kernel"
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+      - name: "🌟 Clone kernel source"
+        working-directory: ./${{ env.KERNEL_LOC_DIR }}
         run: |
-          # Define the config file path
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          git clone --recursive --branch ${{ env.KERNEL_BRANCH }} \
+            ${{ env.KERNEL_REPO }} ${{ env.KERNEL_NAME }} --depth=1
+
+      - name: "📥 Initialize AOSP repo and toolchains"
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          # Initialize AOSP repo
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
+          repo sync --optimized-fetch --prune -j8
           
-          # Set localversion
-          if [ -n "${{ github.event.inputs.localVersion }}" ]; then
-            echo "CONFIG_LOCALVERSION=\"${{ github.event.inputs.localVersion }}\"" >> "$CONFIG_FILE"
-          fi
+          # Clean up existing repo and common directories
+          rm -rf .repo
+          rm -rf common
+
+          # Download and setup custom clang toolchain
+          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
+
+          # Remove unused clang for more space
+          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
+          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
+          rm -rf prebuilts/clang/host/linux-x86/clang-stable
+          
+          # Update build config constants
+          sed -i \
+           -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+           -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
+           ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.constants
+          
+          # Remove defconfig check (if exists)
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki || true
+
+      - name: "🧩 Configure kernel & patches"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          echo "CONFIG_LOCALVERSION=\"${{ env.LOCAL_VERSION }}-${{ env.BUILD_TIME }}\"" >> "$CONFIG_FILE"
+          echo "CONFIG_LOCALVERSION_AUTO=n" >> "$CONFIG_FILE"
+
+          # Helper
+          apply_patch() {
+            local url="$1"
+            local file=$(basename "$url")
+            curl -L -o "$file" "$url"
+            patch -p1 < "$file" || echo "::warning::Hunks failed in $file"
+            rm -f "$file"
+          }
+
+          # Common patches
+          apply_patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-gki-fixup.patch"
+
+          # Kernel-specific patches
+          echo '${{ toJSON(matrix.kernel.extra_patches) }}' | jq -r '.[]' | while read p; do
+            [ -n "$p" ] && apply_patch "$p"
+          done
+
+      - name: "😋 Setup KernelSU & SUSFS & Configs"
+        if: matrix.kernel.enable_ksu == true
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          # KernelSU
+          rm -rf KernelSU drivers/kernelsu
+          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s susfs-main
+
+          # SUSFS patches
+          PATCHES=$(curl -s https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest | \
+                    grep -o 'browser_download_url.*\.patch' | cut -d\" -f3)
+          SELECTED=$(echo "$PATCHES" | \
+                     grep "0001-Implement-SUSFS" | \
+                     grep "Android-${{ env.ANDROID_VERSION }}" | \
+                     grep "Kernel-${{ env.KERNEL_VERSION }}" | head -n 1)
+          [ -z "$SELECTED" ] && SELECTED=$(echo "$PATCHES" | grep "0001-Implement-SUSFS" | head -n 1)
+          [ -z "$SELECTED" ] && { echo "No SUSFS patch"; exit 1; }
+
+          curl -L -o susfs.patch "$SELECTED"
+          patch -p1 < susfs.patch || echo "::warning::SUSFS hunks failed"
+          rm -f susfs.patch
+
+          # Syscall hooks
+          curl -L -o syscall.patch \
+            https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch
+          patch -p1 < syscall.patch || echo "::warning::Syscall hooks hunks failed"
+          rm -f syscall.patch
+          
+          CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
           # Basic optimizations
           echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
-
-      - name: "🛠 Apply kernel patches"
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        run: |
-          curl -L -o lineage.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-fs-lineageos-disguise.patch"
-          patch -p1 < lineage.patch || echo "Warning: Some hunks failed"
-
-      - name: "🔧 Setup KernelSU (KSU variant only)"
-        if: matrix.variant == 'ksu'
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        run: |
-          rm -rf ./KernelSU ./drivers/kernelsu
           
-          # Install KernelSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
-          
-          # Apply SUSFS patch
-          PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
-          SUSFS_PATCH=$(curl -s "$PATCH_URL" | grep "browser_download_url.*0001-Implement-SUSFS.*Android-13.*Kernel-5.15.*patch" | cut -d '"' -f 4 | head -n 1)
-          
-          if [ -n "$SUSFS_PATCH" ]; then
-            curl -L -o susfs.patch "$SUSFS_PATCH"
-            patch -p1 < susfs.patch || echo "Warning: SUSFS patch failed"
-          fi
-          
-          # Apply syscall hooks
-          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
-          patch -p1 < hooks.patch || echo "Warning: Syscall hooks failed"
-          
-          # Add KSU configs
-          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          # SUSFS configs
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           CONFIG_KSU_MANUAL_HOOK=y
@@ -178,83 +207,126 @@ jobs:
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
 
+          echo "✅ KSU configs added"
+
+      - name: "⚙️ Setup basic configs"
+        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        run: |
+          CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          
+          # Basic optimizations
+          echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
+
+          # Performance configs
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
+          CONFIG_ZRAM_DEF_COMP_LZ4=y
+          CONFIG_ZRAM_DEF_COMP="lz4"
+          CONFIG_TCP_CONG_ADVANCED=y
+          CONFIG_TCP_CONG_BIC=n
+          CONFIG_TCP_CONG_WESTWOOD=y
+          CONFIG_TCP_CONG_HTCP=n
+          CONFIG_TCP_CONG_BBR=y
+          CONFIG_DEFAULT_WESTWOOD=y
+          EOF
+          
+          echo "✅ Basic configs added"
+
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
-        env:
-          KBUILD_BUILD_USER: "belowzeroiq"
-          KBUILD_BUILD_HOST: "GitHub"
         run: |
-          export SOURCE_DATE_EPOCH=$(date +%s)
-
-          LTO=${{ github.event.inputs.ltoMode }} \
-          BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 \
+          LTO=full \
+          BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
-      - name: "🩹 Apply KPM patch (KSU variant only)"
-        if: matrix.variant == 'ksu'
+      - name: "🩹 Apply KPM patch"
+        if: matrix.kernel.enable_ksu == true
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
-          curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
+          curl -LSs "${{ matrix.kernel.kpm_patch_url }}" -o patch
           chmod +x patch
           ./patch
-          mv oImage Image
+          mv oImage "${{ env.OUTPUT_NAME }}"
 
-      - name: "📦 Prepare artifact"
-        working-directory: ${{ env.WORK_DIR }}
+      - name: "📁 Copy kernel image"
+        if: matrix.kernel.enable_ksu == false
+        working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
-          cp out/dist/Image Image.${{ matrix.variant }}
+          cp Image "${{ env.OUTPUT_NAME }}"
 
-      - name: "📤 Upload kernel"
+      - name: "📤 Upload kernel artifact"
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.variant }}
-          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}
-          retention-days: 3
+          name: ${{ matrix.kernel.name }}-kernel
+          path: ${{ env.WORK_DIR }}/out/dist/${{ env.OUTPUT_NAME }}
+          retention-days: 1
 
-  Package-Kernels:
-    name: "📦 Package kernels"
+  package-kernels:
+    name: "📦 Package Kernels"
     runs-on: ubuntu-latest
-    needs: Build-Kernel
+    needs: [build-kernels]
     steps:
-      - name: "📥 Download artifacts"
+      - name: "📥 Download kernel artifacts"
         uses: actions/download-artifact@v4
         with:
-          path: ./kernels/
+          path: ./artifacts/
 
-      - name: "📦 Create flashable ZIP"
+      - name: "📦 Create release package"
         run: |
-          BUILD_TIME=$(date +'%Y-%m-%d')
-          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
-          
-          # Copy kernels
-          find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
-          
+          set -e
+
+          # Clone AnyKernel3
+          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b YASK AnyKernel3
+
+          # Copy kernel images
+          find ./artifacts -name "Image.*" -exec cp {} AnyKernel3/ \;
+
+          # Create banner
+          cat > AnyKernel3/banner << 'EOF'
+          ╔═════════════════════════════════════════════════════╗
+          ║                                                     ║
+          ║          ██╗   ██╗ █████╗ ███████╗██╗  ██╗          ║
+          ║          ╚██╗ ██╔╝██╔══██╗██╔════╝██║ ██╔╝          ║
+          ║           ╚████╔╝ ███████║███████╗█████╔╝           ║
+          ║            ╚██╔╝  ██╔══██║╚════██║██╔═██╗           ║
+          ║             ██║   ██║  ██║███████║██║  ██╗          ║
+          ║             ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝          ║
+          ║                                                     ║
+          ║               Yet Another Stock Kernel              ║
+          ║                   by @belowzeroiq                   ║
+          ║                                                     ║
+          ║              Powered by Github Actions              ║
+          ║                                                     ║
+          ╠═════════════════════════════════════════════════════╣
+          ║                                                     ║
+          ║     Features:                                       ║
+          ║     • Full LTO Optimization                         ║
+          ║     • Extra TCP Congestion                          ║
+          ║     • AOSP clang-r547379                            ║
+          ║     • Non-KSU & SukiSU-Ultra + KPM are available    ║
+          ║     • Latest SUSFS version (manual hook)            ║
+          ║                                                     ║
+          ║     Please ensure:                                  ║
+          ║     • Your device is compatible                     ║
+          ║     • You have a backup of your current kernel      ║
+          ║                                                     ║
+          ╚═════════════════════════════════════════════════════╝
+          Installing YASK Kernel...
+          EOF
+
           # Create ZIP
-          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${BUILD_TIME}.zip"
+          ZIP_NAME="Anykernel3_YASK-AIO_$(date +'%Y-%m-%d').zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
-          echo "ZIP_PATH=$(pwd)/$ZIP_NAME" >> $GITHUB_ENV
+          
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "✅ Package created: $ZIP_NAME"
 
-      - name: "📤 Upload final package"
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_PATH }}
-          retention-days: 7
-
-      - name: "📱 Send to Telegram"
-        if: always()
-        run: |
-          if [[ -f "${{ env.ZIP_PATH }}" ]]; then
-            curl -s -F document=@"${{ env.ZIP_PATH }}" \
-                 -F caption="✅ 5.15 Kernel Build Complete - $(date '+%Y-%m-%d %H:%M:%S')" \
-                 -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
-                 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
-          else
-            curl -s -X POST \
-                 -d chat_id=${{ secrets.TELEGRAM_USER_ID }} \
-                 -d text="❌ 5.15 Kernel build failed" \
-                 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
-          fi
+      # - name: "⬆️ Upload to GitHub Release"
+      #  uses: softprops/action-gh-release@v1
+      #  env:
+      #    GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+      #  with:
+      #    files: ${{ env.ZIP_NAME }}
+      #    tag_name: "YASK"
