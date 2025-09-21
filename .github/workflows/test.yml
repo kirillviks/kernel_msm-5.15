@@ -220,8 +220,6 @@ jobs:
           # Performance configs
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y
-          CONFIG_ZRAM_DEF_COMP_LZ4=y
-          CONFIG_ZRAM_DEF_COMP="lz4"
           CONFIG_TCP_CONG_ADVANCED=y
           CONFIG_TCP_CONG_BIC=n
           CONFIG_TCP_CONG_WESTWOOD=y
@@ -276,7 +274,7 @@ jobs:
           set -e
 
           # Clone AnyKernel3
-          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b YASK-TEST AnyKernel3
+          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b YASK AnyKernel3
 
           # Copy kernel images
           find ./artifacts -name "Image.*" -exec cp {} AnyKernel3/ \;
@@ -323,10 +321,62 @@ jobs:
           echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
           echo "✅ Package created: $ZIP_NAME"
 
-      - name: "⬆️ Upload to GitHub Release"
-        uses: softprops/action-gh-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
-        with:
-          files: ${{ env.ZIP_NAME }}
-          tag_name: "YASK"
+      - name: "📱 Send to Telegram"
+        if: always()
+        run: |
+          if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+            # Create stylish caption with emojis and formatting
+            CAPTION="🚀 **YASK Kernel Build Complete** 🚀%0A"
+            CAPTION+="📅 Built: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A%0A"
+            CAPTION+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%0A%0A"
+            CAPTION+="📱 **Device Support:**%0A"
+            CAPTION+="├ 💎 **Topaz** (Xiaomi Redmi Note 12 4G)%0A"
+            CAPTION+="├ 🥘 **Tapas** (Xiaomi Redmi Note 12 5G)%0A"
+            CAPTION+="├ 💙 **Sapphire** (Xiaomi Redmi Note 13)%0A"
+            CAPTION+="├ 💙 **Sapphiren** (Xiaomi Redmi Note 13 5G)%0A"
+            CAPTION+="└ 🌟 **Xun** (Xiaomi Redmi Note 13 Pro)%0A%0A"
+            CAPTION+="🔧 **What's Included:**%0A"
+            CAPTION+="├ 🟢 **GKI** - [Google's Generic Kernel](https://android.googlesource.com/kernel/common/+/android13-5.15-lts)%0A"
+            CAPTION+="├ 🔵 **CLO** - [CodeLinaro MSM-5.15](https://git.codelinaro.org/clo/la/kernel/msm-5.15)%0A"
+            CAPTION+="├ ⚡ **KSU variants** with SukiSU-Ultra + KPM%0A"
+            CAPTION+="└ 🛡️ **Non-KSU variants** for stock experience%0A%0A"
+            CAPTION+="⚙️ **Optimizations:**%0A"
+            CAPTION+="├ 🚄 Full LTO compilation%0A"
+            CAPTION+="├ 🌐 Enhanced TCP congestion (BBR + Westwood)%0A"
+            CAPTION+="├ 🔨 AOSP Clang r547379%0A"
+            CAPTION+="├ 🔐 Latest [SUSFS](https://github.com/sidex15/SUSFS4KSU) with manual hooks%0A"
+            CAPTION+="└ ⚡ Performance-focused configs%0A%0A"
+            CAPTION+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%0A%0A"
+            CAPTION+="📋 **Changelog:**%0A"
+            CAPTION+="• Weekly automated builds%0A"
+            CAPTION+="• Latest upstream patches applied%0A"
+            CAPTION+="• Optimized for Android 13 (5.15 LTS)%0A"
+            CAPTION+="• Multi-variant support in single flash%0A%0A"
+            CAPTION+="🔗 **Links:**%0A"
+            CAPTION+="├ 📦 [AnyKernel3 Source](https://github.com/topnotchfreaks/AnyKernel3/tree/YASK)%0A"
+            CAPTION+="├ 🐛 [Report Issues](https://github.com/$(echo $GITHUB_REPOSITORY)/issues)%0A"
+            CAPTION+="└ 💬 [Telegram Support](https://t.me/belowzeroiq)%0A%0A"
+            CAPTION+="⚠️ **Important:**%0A"
+            CAPTION+="• Backup your current kernel before flashing%0A"
+            CAPTION+="• Ensure device compatibility%0A"
+            CAPTION+="• Use at your own risk%0A%0A"
+            CAPTION+="🏷️ \`#YASK #Android13 #Kernel5_15 #KernelSU #SUSFS\`"
+
+            curl -s -F document=@"${{ env.ZIP_PATH }}" \
+                 -F caption="$CAPTION" \
+                 -F parse_mode="Markdown" \
+                 -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+                 "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendDocument"
+          else
+            # Failure message with more details
+            FAIL_MSG="❌ **YASK Kernel Build Failed** ❌%0A%0A"
+            FAIL_MSG+="📅 Time: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A"
+            FAIL_MSG+="🔗 Check logs: [GitHub Actions](https://github.com/$(echo $GITHUB_REPOSITORY)/actions)%0A"
+            FAIL_MSG+="🐛 Report issue: [Issues](https://github.com/$(echo $GITHUB_REPOSITORY)/issues)%0A%0A"
+            FAIL_MSG+="🔄 Build will retry on next scheduled run or manual trigger."
+
+            curl -s -X POST \
+                 -H "Content-Type: application/json" \
+                 -d "{\"chat_id\":\"${{ secrets.TELEGRAM_USER_ID }}\",\"text\":\"$FAIL_MSG\",\"parse_mode\":\"Markdown\"}" \
+                 "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendMessage"
+          fi
