@@ -324,36 +324,35 @@ jobs:
       - name: "📱 Send to Telegram"
         if: always()
         run: |
-          ZIP_PATH="./${{ env.ZIP_NAME }}"
-          
-          if [[ -f "$ZIP_PATH" ]]; then
-            # Create stylish caption with emojis and formatting
+          if [[ "${{ steps.create_release.outcome }}" == "success" ]]; then
+            # Success message with download link
+            DOWNLOAD_URL="https://github.com/${{ github.repository }}/releases/download/${{ env.RELEASE_TAG }}/${{ env.ZIP_NAME }}"
+            
             CAPTION="🚀 **YASK Kernel Build Complete** 🚀%0A"
-            CAPTION+="📅 Built: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A%0A"
+            CAPTION+="📅 Built: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A"
+            CAPTION+="🏷️ **Version:** \`${{ env.RELEASE_TAG }}\`%0A%0A"
             CAPTION+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%0A%0A"
             CAPTION+="📱 **Device Support:**%0A"
             CAPTION+="├ 🥘 **Tapas** (Xiaomi Redmi Note 12 4G)%0A"
             CAPTION+="├ 💎 **Topaz** (Xiaomi Redmi Note 12 4G NFC)%0A"
             CAPTION+="├ 💙 **Sapphire** (Xiaomi Redmi Note 13 4G)%0A"
             CAPTION+="├ 💙 **Sapphiren** (Xiaomi Redmi Note 13 4G NFC)%0A"
-            CAPTION+="└ 🌟 **Xun** (Xiaomi Redmi Note 13 Pro)%0A%0A"
+            CAPTION+="└ 🌟 **Xun** (Xiaomi Redmi Pad SE)%0A%0A"
             CAPTION+="🔧 **What's Included:**%0A"
-            CAPTION+="├ 🟢 **GKI** - [Google's Generic Kernel](https://android.googlesource.com/kernel/common/+/android13-5.15-lts)%0A"
-            CAPTION+="├ 🔵 **CLO** - [CodeLinaro MSM-5.15](https://git.codelinaro.org/clo/la/kernel/msm-5.15)%0A"
+            CAPTION+="├ 🟢 **GKI** - Google's Generic Kernel%0A"
+            CAPTION+="├ 🔵 **CLO** - CodeLinaro MSM-5.15%0A"
             CAPTION+="├ ⚡ **KSU variants** with SukiSU-Ultra + KPM%0A"
             CAPTION+="└ 🛡️ **Non-KSU variants** for stock experience%0A%0A"
             CAPTION+="⚙️ **Optimizations:**%0A"
             CAPTION+="├ 🚄 Full LTO compilation%0A"
             CAPTION+="├ 🌐 Enhanced TCP congestion (BBR + Westwood)%0A"
             CAPTION+="├ 🔨 AOSP Clang r547379%0A"
-            CAPTION+="├ 🔐 Latest [SUSFS](https://github.com/sidex15/SUSFS4KSU) with manual hooks%0A"
+            CAPTION+="├ 🔐 Latest SUSFS with manual hooks%0A"
             CAPTION+="└ ⚡ Performance-focused configs%0A%0A"
             CAPTION+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%0A%0A"
-            CAPTION+="📋 **Changelog:**%0A"
-            CAPTION+="• Weekly automated builds%0A"
-            CAPTION+="• Latest upstream patches applied%0A"
-            CAPTION+="• Optimized for Android 13 (5.15 LTS)%0A"
-            CAPTION+="• Multi-variant support in single flash%0A%0A"
+            CAPTION+="📥 **Download:**%0A"
+            CAPTION+="🔗 [Direct Download]($DOWNLOAD_URL)%0A"
+            CAPTION+="📋 [Full Release Notes](https://github.com/${{ github.repository }}/releases/tag/${{ env.RELEASE_TAG }})%0A%0A"
             CAPTION+="🔗 **Links:**%0A"
             CAPTION+="├ 📦 [AnyKernel3 Source](https://github.com/topnotchfreaks/AnyKernel3/tree/YASK)%0A"
             CAPTION+="├ 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)%0A"
@@ -364,16 +363,15 @@ jobs:
             CAPTION+="• Use at your own risk%0A%0A"
             CAPTION+="🏷️ \`#YASK #Android13 #Kernel5_15 #KernelSU #SUSFS\`"
 
-            curl -s -F document=@"$ZIP_PATH" \
-                 -F caption="$CAPTION" \
-                 -F parse_mode="Markdown" \
-                 -F chat_id=${{ secrets.YASK_RELEASES_ID }} \
-                 "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendDocument"
+            curl -s -X POST \
+                 -H "Content-Type: application/json" \
+                 -d "{\"chat_id\":\"${{ secrets.YASK_RELEASES_ID }}\",\"text\":\"$CAPTION\",\"parse_mode\":\"Markdown\",\"disable_web_page_preview\":false}" \
+                 "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendMessage"
           else
-            # Failure message with more details
+            # Failure message
             FAIL_MSG="❌ **YASK Kernel Build Failed** ❌%0A%0A"
             FAIL_MSG+="📅 Time: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A"
-            FAIL_MSG+="🔗 Check logs: [GitHub Actions](https://github.com/${{ github.repository }}/actions)%0A"
+            FAIL_MSG+="🔗 Check logs: [GitHub Actions](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }})%0A"
             FAIL_MSG+="🐛 Report issue: [Issues](https://github.com/${{ github.repository }}/issues)%0A%0A"
             FAIL_MSG+="🔄 Build will retry on next scheduled run or manual trigger."
 
