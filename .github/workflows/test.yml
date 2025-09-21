@@ -324,7 +324,9 @@ jobs:
       - name: "📱 Send to Telegram"
         if: always()
         run: |
-          if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+          ZIP_PATH="./${{ env.ZIP_NAME }}"
+          
+          if [[ -f "$ZIP_PATH" ]]; then
             # Create stylish caption with emojis and formatting
             CAPTION="🚀 **YASK Kernel Build Complete** 🚀%0A"
             CAPTION+="📅 Built: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A%0A"
@@ -354,7 +356,7 @@ jobs:
             CAPTION+="• Multi-variant support in single flash%0A%0A"
             CAPTION+="🔗 **Links:**%0A"
             CAPTION+="├ 📦 [AnyKernel3 Source](https://github.com/topnotchfreaks/AnyKernel3/tree/YASK)%0A"
-            CAPTION+="├ 🐛 [Report Issues](https://github.com/$(echo $GITHUB_REPOSITORY)/issues)%0A"
+            CAPTION+="├ 🐛 [Report Issues](https://github.com/${{ github.repository }}/issues)%0A"
             CAPTION+="└ 💬 [Telegram Support](https://t.me/belowzeroiq)%0A%0A"
             CAPTION+="⚠️ **Important:**%0A"
             CAPTION+="• Backup your current kernel before flashing%0A"
@@ -362,7 +364,7 @@ jobs:
             CAPTION+="• Use at your own risk%0A%0A"
             CAPTION+="🏷️ \`#YASK #Android13 #Kernel5_15 #KernelSU #SUSFS\`"
 
-            curl -s -F document=@"${{ env.ZIP_PATH }}" \
+            curl -s -F document=@"$ZIP_PATH" \
                  -F caption="$CAPTION" \
                  -F parse_mode="Markdown" \
                  -F chat_id=${{ secrets.YASK_RELEASES_ID }} \
@@ -371,8 +373,8 @@ jobs:
             # Failure message with more details
             FAIL_MSG="❌ **YASK Kernel Build Failed** ❌%0A%0A"
             FAIL_MSG+="📅 Time: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A"
-            FAIL_MSG+="🔗 Check logs: [GitHub Actions](https://github.com/$(echo $GITHUB_REPOSITORY)/actions)%0A"
-            FAIL_MSG+="🐛 Report issue: [Issues](https://github.com/$(echo $GITHUB_REPOSITORY)/issues)%0A%0A"
+            FAIL_MSG+="🔗 Check logs: [GitHub Actions](https://github.com/${{ github.repository }}/actions)%0A"
+            FAIL_MSG+="🐛 Report issue: [Issues](https://github.com/${{ github.repository }}/issues)%0A%0A"
             FAIL_MSG+="🔄 Build will retry on next scheduled run or manual trigger."
 
             curl -s -X POST \
