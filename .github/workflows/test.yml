@@ -233,7 +233,7 @@ jobs:
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          LTO=full \
+          LTO=thin \
           BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
@@ -330,10 +330,10 @@ jobs:
             CAPTION+="📅 Built: \`$(date '+%Y-%m-%d %H:%M:%S')\`%0A%0A"
             CAPTION+="━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━%0A%0A"
             CAPTION+="📱 **Device Support:**%0A"
-            CAPTION+="├ 💎 **Topaz** (Xiaomi Redmi Note 12 4G)%0A"
-            CAPTION+="├ 🥘 **Tapas** (Xiaomi Redmi Note 12 5G)%0A"
-            CAPTION+="├ 💙 **Sapphire** (Xiaomi Redmi Note 13)%0A"
-            CAPTION+="├ 💙 **Sapphiren** (Xiaomi Redmi Note 13 5G)%0A"
+            CAPTION+="├ 🥘 **Tapas** (Xiaomi Redmi Note 12 4G)%0A"
+            CAPTION+="├ 💎 **Topaz** (Xiaomi Redmi Note 12 4G NFC)%0A"
+            CAPTION+="├ 💙 **Sapphire** (Xiaomi Redmi Note 13 4G)%0A"
+            CAPTION+="├ 💙 **Sapphiren** (Xiaomi Redmi Note 13 4G NFC)%0A"
             CAPTION+="└ 🌟 **Xun** (Xiaomi Redmi Note 13 Pro)%0A%0A"
             CAPTION+="🔧 **What's Included:**%0A"
             CAPTION+="├ 🟢 **GKI** - [Google's Generic Kernel](https://android.googlesource.com/kernel/common/+/android13-5.15-lts)%0A"
@@ -365,7 +365,7 @@ jobs:
             curl -s -F document=@"${{ env.ZIP_PATH }}" \
                  -F caption="$CAPTION" \
                  -F parse_mode="Markdown" \
-                 -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+                 -F chat_id=${{ secrets.YASK_RELEASES_ID }} \
                  "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendDocument"
           else
             # Failure message with more details
@@ -377,6 +377,6 @@ jobs:
 
             curl -s -X POST \
                  -H "Content-Type: application/json" \
-                 -d "{\"chat_id\":\"${{ secrets.TELEGRAM_USER_ID }}\",\"text\":\"$FAIL_MSG\",\"parse_mode\":\"Markdown\"}" \
+                 -d "{\"chat_id\":\"${{ secrets.YASK_RELEASES_ID }}\",\"text\":\"$FAIL_MSG\",\"parse_mode\":\"Markdown\"}" \
                  "https://api.telegram.org/bot${{ secrets.YASK_BOT_TOKEN }}/sendMessage"
           fi
