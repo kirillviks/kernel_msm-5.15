@@ -69,7 +69,7 @@ jobs:
           mkdir -p $kernelDir
           echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2
+          sudo apt-get install -y repo rsync aria2 curl jq
 
           # Setup swap based on LTO mode
           if [ "${{ github.event.inputs.ltoMode }}" = "full" ]; then
@@ -146,25 +146,80 @@ jobs:
         if: matrix.variant == 'ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
+          set -e  # Exit on any error
+          
           rm -rf ./KernelSU ./drivers/kernelsu
           
-          # Install KernelSU with SUSFS
+          echo "=== Installing KernelSU with SUSFS ==="
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
           
-          # Apply SUSFS patch
-          PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
-          SUSFS_PATCH=$(curl -s "$PATCH_URL" | grep "browser_download_url.*0001-Implement-SUSFS.*Android-13.*Kernel-5.15.*patch" | cut -d '"' -f 4 | head -n 1)
-          
-          if [ -n "$SUSFS_PATCH" ]; then
-            curl -L -o susfs.patch "$SUSFS_PATCH"
-            patch -p1 < susfs.patch || echo "Warning: SUSFS patch failed"
+          # Verify KernelSU installation
+          if [ ! -d "KernelSU" ]; then
+            echo "ERROR: KernelSU directory not found after installation"
+            exit 1
           fi
           
-          # Apply syscall hooks
-          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
-          patch -p1 < hooks.patch || echo "Warning: Syscall hooks failed"
+          echo "=== Fetching SUSFS patch ==="
+          # Get the latest release info
+          PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
+          RELEASE_INFO=$(curl -s "$PATCH_URL")
           
-          # Add KSU configs
+          # Find the SUSFS patch for Android 13 Kernel 5.15
+          SUSFS_PATCH=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | test("0001-Implement-SUSFS.*Android-13.*Kernel-5.15.*patch")) | .browser_download_url' | head -n 1)
+          
+          if [ -z "$SUSFS_PATCH" ] || [ "$SUSFS_PATCH" = "null" ]; then
+            echo "ERROR: Could not find SUSFS patch in latest release"
+            echo "Available assets:"
+            echo "$RELEASE_INFO" | jq -r '.assets[].name'
+            exit 1
+          fi
+          
+          echo "Found SUSFS patch: $SUSFS_PATCH"
+          curl -L -o susfs.patch "$SUSFS_PATCH"
+          
+          # Check if patch file was downloaded
+          if [ ! -f "susfs.patch" ] || [ ! -s "susfs.patch" ]; then
+            echo "ERROR: SUSFS patch file is empty or not downloaded"
+            exit 1
+          fi
+          
+          echo "=== Applying SUSFS patch ==="
+          # Try to apply patch with different strip levels
+          if ! patch -p1 --dry-run < susfs.patch > /dev/null 2>&1; then
+            echo "Trying patch with -p0..."
+            if ! patch -p0 --dry-run < susfs.patch > /dev/null 2>&1; then
+              echo "ERROR: SUSFS patch cannot be applied"
+              echo "Patch content preview:"
+              head -n 50 susfs.patch
+              exit 1
+            else
+              patch -p0 < susfs.patch
+            fi
+          else
+            patch -p1 < susfs.patch
+          fi
+          
+          echo "=== Applying syscall hooks patch ==="
+          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
+          
+          if [ ! -f "hooks.patch" ] || [ ! -s "hooks.patch" ]; then
+            echo "ERROR: Syscall hooks patch file is empty or not downloaded"
+            exit 1
+          fi
+          
+          # Try to apply syscall hooks
+          if ! patch -p1 --dry-run < hooks.patch > /dev/null 2>&1; then
+            echo "Trying syscall hooks patch with -p0..."
+            if ! patch -p0 --dry-run < hooks.patch > /dev/null 2>&1; then
+              echo "WARNING: Syscall hooks patch cannot be applied (may already be included)"
+            else
+              patch -p0 < hooks.patch
+            fi
+          else
+            patch -p1 < hooks.patch
+          fi
+          
+          echo "=== Adding KSU configs ==="
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
@@ -189,6 +244,8 @@ jobs:
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
+          
+          echo "=== KernelSU setup completed successfully ==="
 
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
