@@ -151,14 +151,14 @@ jobs:
             [ -n "$p" ] && apply_patch "$p"
           done
 
-      - name: "😋 Add BBG Support"
-        if: matrix.kernel.enable_ksu == true
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          echo "Adding BBG..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
+     # - name: "😋 Add BBG Support"
+     #   if: matrix.kernel.enable_ksu == true
+     #   working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+     #   run: |
+     #     echo "Adding BBG..."
+     #     wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+     #     echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+     #     sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
 
       - name: "😋 Setup KernelSU & SUSFS & Configs"
         if: matrix.kernel.enable_ksu == true
