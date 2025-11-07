@@ -134,14 +134,14 @@ jobs:
           # Basic optimizations
           echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
 
-     # - name: "🔧 Add BBG Support (KSU variant only)"
-     #   if: matrix.variant == 'ksu'
-     #   working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-     #   run: |
-     #     echo "Adding BBG..."
-     #     wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
-     #     echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-     #     sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
+      - name: "🔧 Add BBG Support (KSU variant only)"
+        if: matrix.variant == 'ksu'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          echo "Adding BBG..."
+          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
+          echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
+          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
 
       - name: "🔧 Setup KernelSU (KSU variant only)"
         if: matrix.variant == 'ksu'
