@@ -208,15 +208,15 @@ jobs:
             patch -p1 < susfs.patch
           fi
           
-          echo "=== Applying syscall hooks patch ==="
-          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
+          echo "=== Applying scope min manual hooks v1.6 patch ==="
+          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/scope_min_manual_hooks_v1.6.patch"
           
           if [ ! -f "hooks.patch" ] || [ ! -s "hooks.patch" ]; then
-            echo "ERROR: Syscall hooks patch file is empty or not downloaded"
+            echo "ERROR: Scope min manual hooks patch file is empty or not downloaded"
             exit 1
           fi
           
-          # Try to apply syscall hooks
+          # Try to apply hooks
           if ! patch -p1 --dry-run < hooks.patch > /dev/null 2>&1; then
             echo "Trying syscall hooks patch with -p0..."
             if ! patch -p0 --dry-run < hooks.patch > /dev/null 2>&1; then
