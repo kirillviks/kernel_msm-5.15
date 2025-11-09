@@ -161,9 +161,11 @@ jobs:
             patch -p1 < susfs.patch || echo "Warning: SUSFS patch failed"
           fi
           
-          # Apply syscall hooks
-          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
-          patch -p1 < hooks.patch || echo "Warning: Syscall hooks failed"
+          # Hooks
+          curl -L -o hooks.patch \
+          https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/scope_min_manual_hooks_v1.6.patch
+          patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
+          rm -f hooks.patch
           
           # Add KSU configs
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
