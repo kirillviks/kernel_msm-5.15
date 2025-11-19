@@ -37,14 +37,6 @@ on:
           - "noksu"
           - "ksu"
           - "both"
-      ltoMode:
-        description: "Choose LTO mode"
-        required: true
-        default: "thin"
-        type: choice
-        options:
-          - "thin"
-          - "full"
 
 jobs:
   Build-Kernel:
@@ -70,19 +62,6 @@ jobs:
           echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2 curl jq
-
-          # Setup swap based on LTO mode
-          if [ "${{ github.event.inputs.ltoMode }}" = "full" ]; then
-            SWAP_SIZE=8G
-          else
-            SWAP_SIZE=4G
-          fi
-          sudo fallocate -l $SWAP_SIZE /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          echo "vm.swappiness=60" | sudo tee -a /etc/sysctl.conf
-          sudo sysctl -p
 
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.kernelDir }}
@@ -259,7 +238,7 @@ jobs:
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          LTO=${{ github.event.inputs.ltoMode }} \
+          LTO=thin \
           BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
