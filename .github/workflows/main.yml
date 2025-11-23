@@ -162,16 +162,16 @@ jobs:
           fi
           
           # Hooks
-          curl -L -o hooks.patch \
-          https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/scope_min_manual_hooks_v1.6.patch
-          patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
-          rm -f hooks.patch
+          # curl -L -o hooks.patch \
+          # https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/scope_min_manual_hooks_v1.6.patch
+          # patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
+          # rm -f hooks.patch
           
           # Add KSU configs
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
+          # CONFIG_KSU_MANUAL_HOOK is not set
           CONFIG_KPM=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
@@ -188,7 +188,7 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
