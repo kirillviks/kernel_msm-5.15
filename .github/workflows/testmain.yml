@@ -1,4 +1,4 @@
-name: "Build kernels TEST"
+name: "TEST"
 
 env:
   OUT_DIR: "out"
@@ -24,12 +24,12 @@ on:
         type: string
         default: "gki"
       localVersion:
-        description: "Custom localversion name (e.g., -mybuild)"
+        description: "LOCALVERSION"
         required: false
         type: string
         default: ""
       buildKSU:
-        description: "Build KSU variant?"
+        description: "Variant"
         required: true
         type: choice
         default: "both"
@@ -37,6 +37,14 @@ on:
           - "noksu"
           - "ksu"
           - "both"
+      KSUMVariant:
+        description: "Mount variant"
+        required: true
+        type: choice
+        default: "MagicMount"
+        options:
+          - "OverlayFS"
+          - "MagicMount"
 
 jobs:
   Build-Kernel:
@@ -48,7 +56,6 @@ jobs:
           inputs.buildKSU == 'both' && '["noksu", "ksu"]' ||
           inputs.buildKSU == 'ksu' && '["ksu"]' ||
           '["noksu"]' ) }}
-
     env:
       kernelDir: common_${{ github.event.inputs.kernelDevice }}
       kernelName: common
@@ -61,7 +68,7 @@ jobs:
           mkdir -p $kernelDir
           echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2 curl jq
+          sudo apt-get install -y repo rsync aria2
 
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.kernelDir }}
@@ -134,93 +141,50 @@ jobs:
         if: matrix.variant == 'ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-          set -e  # Exit on any error
-          
           rm -rf ./KernelSU ./drivers/kernelsu
           
-          echo "=== Installing KernelSU with SUSFS ==="
+          # Install KernelSU with SUSFS
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
           
-          # Verify KernelSU installation
-          if [ ! -d "KernelSU" ]; then
-            echo "ERROR: KernelSU directory not found after installation"
-            exit 1
-          fi
-          
-          echo "=== Fetching SUSFS patch ==="
-          # Get the latest release info
+          # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
-          RELEASE_INFO=$(curl -s "$PATCH_URL")
+          SUSFS_PATCH=$(curl -s "$PATCH_URL" | grep "browser_download_url.*0001-Implement-SUSFS.*Android-13.*Kernel-5.15.*patch" | cut -d '"' -f 4 | head -n 1)
           
-          # Find the SUSFS patch for Android 13 Kernel 5.15
-          SUSFS_PATCH=$(echo "$RELEASE_INFO" | jq -r '.assets[] | select(.name | test("0001-Implement-SUSFS.*Android-13.*Kernel-5.15.*patch")) | .browser_download_url' | head -n 1)
-          
-          if [ -z "$SUSFS_PATCH" ] || [ "$SUSFS_PATCH" = "null" ]; then
-            echo "ERROR: Could not find SUSFS patch in latest release"
-            echo "Available assets:"
-            echo "$RELEASE_INFO" | jq -r '.assets[].name'
-            exit 1
+          if [ -n "$SUSFS_PATCH" ]; then
+            curl -L -o susfs.patch "$SUSFS_PATCH"
+            patch -p1 < susfs.patch || echo "Warning: SUSFS patch failed"
           fi
           
-          echo "Found SUSFS patch: $SUSFS_PATCH"
-          curl -L -o susfs.patch "$SUSFS_PATCH"
+          # Hooks
+          # curl -L -o hooks.patch \
+          # https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch
+          # patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
+          # rm -f hooks.patch
           
-          # Check if patch file was downloaded
-          if [ ! -f "susfs.patch" ] || [ ! -s "susfs.patch" ]; then
-            echo "ERROR: SUSFS patch file is empty or not downloaded"
-            exit 1
-          fi
-          
-          echo "=== Applying SUSFS patch ==="
-          # Try to apply patch with different strip levels
-          if ! patch -p1 --dry-run < susfs.patch > /dev/null 2>&1; then
-            echo "Trying patch with -p0..."
-            if ! patch -p0 --dry-run < susfs.patch > /dev/null 2>&1; then
-              echo "ERROR: SUSFS patch cannot be applied"
-              echo "Patch content preview:"
-              head -n 50 susfs.patch
-              exit 1
-            else
-              patch -p0 < susfs.patch
-            fi
-          else
-            patch -p1 < susfs.patch
-          fi
-          
-          echo "=== Applying Syscall hooks ==="
-          curl -L -o hooks.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch"
-          
-          if [ ! -f "hooks.patch" ] || [ ! -s "hooks.patch" ]; then
-           echo "ERROR: Syscall hooks patch file is empty or not downloaded"
-           exit 1
-          fi
-          
-          # Try to apply hooks
-          if ! patch -p1 --dry-run < hooks.patch > /dev/null 2>&1; then
-            echo "Trying syscall hooks patch with -p0..."
-            if ! patch -p0 --dry-run < hooks.patch > /dev/null 2>&1; then
-              echo "WARNING: Syscall hooks patch cannot be applied (may already be included)"
-            else
-              patch -p0 < hooks.patch
-            fi
-            else
-            patch -p1 < hooks.patch
-          fi
-          
-          echo "=== Adding KSU configs ==="
+          # Add KSU configs based on mount variant
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          cat >> "$CONFIG_FILE" << 'EOF'
+          
+          # Determine mount variant settings
+          if [ "${{ github.event.inputs.KSUMVariant }}" == "MagicMount" ]; then
+            MAGIC_MOUNT_CONFIG="CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y"
+            OVERLAYFS_CONFIG="CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n"
+          else
+            MAGIC_MOUNT_CONFIG="CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=n"
+            OVERLAYFS_CONFIG="CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y"
+          fi
+          
+          cat >> "$CONFIG_FILE" << EOF
           CONFIG_KSU=y
-          CONFIG_KSU_MANUAL_HOOK=y
+          # CONFIG_KSU_MANUAL_HOOK is not set
           CONFIG_KPM=y
           CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          ${MAGIC_MOUNT_CONFIG}
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+          ${OVERLAYFS_CONFIG}
           CONFIG_KSU_SUSFS_TRY_UMOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
@@ -228,12 +192,10 @@ jobs:
           CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
           CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
           CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=n
+          CONFIG_KSU_SUSFS_SUS_SU=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
-          
-          echo "=== KernelSU setup completed successfully ==="
 
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
@@ -254,13 +216,19 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          cp out/dist/Image Image.${{ matrix.variant }}
+          # Add mount variant suffix to KSU builds
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            MOUNT_SUFFIX="_${{ github.event.inputs.KSUMVariant }}"
+          else
+            MOUNT_SUFFIX=""
+          fi
+          cp out/dist/Image Image.${{ matrix.variant }}${MOUNT_SUFFIX}
 
       - name: "📤 Upload kernel"
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.variant }}
-          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}
+          name: kernel-${{ matrix.variant }}${{ matrix.variant == 'ksu' && format('_{0}', github.event.inputs.KSUMVariant) || '' }}
+          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}${{ matrix.variant == 'ksu' && format('_{0}', github.event.inputs.KSUMVariant) || '' }}
           retention-days: 3
 
   Package-Kernels:
@@ -281,8 +249,8 @@ jobs:
           # Copy kernels
           find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
           
-          # Create ZIP
-          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${BUILD_TIME}.zip"
+          # Create ZIP with mount variant info
+          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${{ github.event.inputs.KSUMVariant }}_${BUILD_TIME}.zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
@@ -300,8 +268,13 @@ jobs:
         if: always()
         run: |
           if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+            CAPTION="✅ Kernel Build Complete
+          Branch: ${{ github.event.inputs.kernelBranch }}
+          Mount: ${{ github.event.inputs.KSUMVariant }}
+          Date: $(date '+%Y-%m-%d %H:%M:%S')"
+            
             curl -s -F document=@"${{ env.ZIP_PATH }}" \
-                 -F caption="✅ Kernel Build Complete - $(date '+%Y-%m-%d %H:%M:%S')" \
+                 -F caption="$CAPTION" \
                  -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
                  "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
           else
