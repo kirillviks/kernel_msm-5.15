@@ -136,7 +136,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           # Install KernelSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s main
           
           # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
@@ -158,6 +158,7 @@ jobs:
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           # CONFIG_KSU_MANUAL_HOOK is not set
+          CONFIG_KSU_TRACEPOINT_HOOK=y
           CONFIG_KPM=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
