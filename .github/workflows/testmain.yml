@@ -1,4 +1,4 @@
-name: "TEST"
+name: "Build kernels"
 
 env:
   OUT_DIR: "out"
@@ -24,12 +24,12 @@ on:
         type: string
         default: "gki"
       localVersion:
-        description: "LOCALVERSION"
+        description: "Custom localversion name (e.g., -mybuild)"
         required: false
         type: string
         default: ""
       buildKSU:
-        description: "Variant"
+        description: "Build KSU variant?"
         required: true
         type: choice
         default: "both"
@@ -37,14 +37,24 @@ on:
           - "noksu"
           - "ksu"
           - "both"
-      KSUMVariant:
-        description: "Mount variant"
-        required: true
+      optimizationLevel:
+        description: "Compiler optimization level"
+        required: false
         type: choice
-        default: "MagicMount"
+        default: "O2"
         options:
-          - "OverlayFS"
-          - "MagicMount"
+          - "O2"
+          - "O3"
+          - "Os"
+      tickRate:
+        description: "Kernel tick rate (Hz)"
+        required: false
+        type: choice
+        default: "250"
+        options:
+          - "100"
+          - "250"
+          - "300"
 
 jobs:
   Build-Kernel:
@@ -114,11 +124,53 @@ jobs:
            -e '/^MODULES_LIST=/d' \
            ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
 
-      - name: "⚙️ Configure kernel"
+      - name: "⚙️ Configure kernel optimization and tick rate"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-          # Define the config file path
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          
+          # Remove existing optimization configs
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_SIZE/d' "$CONFIG_FILE"
+          
+          # Apply selected optimization level
+          case "${{ github.event.inputs.optimizationLevel }}" in
+            O2)
+              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
+              ;;
+            O3)
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
+              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
+              ;;
+            Os)
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
+              echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> "$CONFIG_FILE"
+              ;;
+          esac
+          
+          # Remove existing tick rate configs
+          sed -i '/^CONFIG_HZ=/d' "$CONFIG_FILE"
+          
+          # Apply selected tick rate
+          case "${{ github.event.inputs.tickRate }}" in
+            100)
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=100" >> "$CONFIG_FILE"
+              ;;
+            250)
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=250" >> "$CONFIG_FILE"
+              ;;
+            300)
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=300" >> "$CONFIG_FILE"
+              ;;
+          esac
           
           # Set localversion
           if [ -n "${{ github.event.inputs.localVersion }}" ]; then
@@ -127,6 +179,9 @@ jobs:
           
           # Basic optimizations
           echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
+          
+          echo "✅ Applied -${{ github.event.inputs.optimizationLevel }} optimization"
+          echo "✅ Applied ${{ github.event.inputs.tickRate }}Hz tick rate"
 
       - name: "🔧 Add BBG Support (KSU variant only)"
         if: matrix.variant == 'ksu'
@@ -144,7 +199,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           # Install KernelSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
           # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
@@ -155,36 +210,20 @@ jobs:
             patch -p1 < susfs.patch || echo "Warning: SUSFS patch failed"
           fi
           
-          # Hooks
-          # curl -L -o hooks.patch \
-          # https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch
-          # patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
-          # rm -f hooks.patch
-          
-          # Add KSU configs based on mount variant
+          # Add KSU configs
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          
-          # Determine mount variant settings
-          if [ "${{ github.event.inputs.KSUMVariant }}" == "MagicMount" ]; then
-            MAGIC_MOUNT_CONFIG="CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y"
-            OVERLAYFS_CONFIG="CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n"
-          else
-            MAGIC_MOUNT_CONFIG="CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=n"
-            OVERLAYFS_CONFIG="CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y"
-          fi
-          
-          cat >> "$CONFIG_FILE" << EOF
+          cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           # CONFIG_KSU_MANUAL_HOOK is not set
           CONFIG_KPM=y
           CONFIG_KSU_SUSFS=y
-          ${MAGIC_MOUNT_CONFIG}
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_PATH=y
           CONFIG_KSU_SUSFS_SUS_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          ${OVERLAYFS_CONFIG}
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
           CONFIG_KSU_SUSFS_TRY_UMOUNT=y
           CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
           CONFIG_KSU_SUSFS_SPOOF_UNAME=y
@@ -216,19 +255,13 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          # Add mount variant suffix to KSU builds
-          if [ "${{ matrix.variant }}" == "ksu" ]; then
-            MOUNT_SUFFIX="_${{ github.event.inputs.KSUMVariant }}"
-          else
-            MOUNT_SUFFIX=""
-          fi
-          cp out/dist/Image Image.${{ matrix.variant }}${MOUNT_SUFFIX}
+          cp out/dist/Image Image.${{ matrix.variant }}
 
       - name: "📤 Upload kernel"
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.variant }}${{ matrix.variant == 'ksu' && format('_{0}', github.event.inputs.KSUMVariant) || '' }}
-          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}${{ matrix.variant == 'ksu' && format('_{0}', github.event.inputs.KSUMVariant) || '' }}
+          name: kernel-${{ matrix.variant }}-${{ github.event.inputs.optimizationLevel }}-${{ github.event.inputs.tickRate }}hz
+          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}
           retention-days: 3
 
   Package-Kernels:
@@ -249,8 +282,8 @@ jobs:
           # Copy kernels
           find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
           
-          # Create ZIP with mount variant info
-          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${{ github.event.inputs.KSUMVariant }}_${BUILD_TIME}.zip"
+          # Create ZIP with optimization info
+          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${{ github.event.inputs.optimizationLevel }}_${{ github.event.inputs.tickRate }}hz_${BUILD_TIME}.zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
@@ -270,8 +303,10 @@ jobs:
           if [[ -f "${{ env.ZIP_PATH }}" ]]; then
             CAPTION="✅ Kernel Build Complete
           Branch: ${{ github.event.inputs.kernelBranch }}
-          Mount: ${{ github.event.inputs.KSUMVariant }}
-          Date: $(date '+%Y-%m-%d %H:%M:%S')"
+          Optimization: -${{ github.event.inputs.optimizationLevel }}
+          Tick Rate: ${{ github.event.inputs.tickRate }}Hz
+          Variants: ${{ github.event.inputs.buildKSU }}
+          Time: $(date '+%Y-%m-%d %H:%M:%S')"
             
             curl -s -F document=@"${{ env.ZIP_PATH }}" \
                  -F caption="$CAPTION" \
@@ -280,6 +315,6 @@ jobs:
           else
             curl -s -X POST \
                  -d chat_id=${{ secrets.TELEGRAM_USER_ID }} \
-                 -d text="❌ Kernel build failed" \
+                 -d text="❌ Kernel build failed - Optimization: -${{ github.event.inputs.optimizationLevel }}, Tick: ${{ github.event.inputs.tickRate }}Hz" \
                  "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
           fi
