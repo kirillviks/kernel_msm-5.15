@@ -159,7 +159,7 @@ jobs:
         run: |
           # KernelSU
           rm -rf KernelSU drivers/kernelsu
-          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s susfs-main
+          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s builtin
 
           # SUSFS patches
           PATCHES=$(curl -s https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest | \
@@ -190,6 +190,7 @@ jobs:
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
           # CONFIG_KSU_MANUAL_HOOK is not set
+          CONFIG_KPROBES=y
           CONFIG_KPM=y
           CONFIG_KSU_SUSFS=y
           CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
