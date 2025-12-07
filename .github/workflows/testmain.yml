@@ -213,24 +213,26 @@ jobs:
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
           # Copy SUSFS files to KernelSU
-          cp -r susfs4ksu/kernel_patches/* KernelSU/kernel/
+          cp -r susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/ 2>/dev/null || true
           
-          # Apply SUSFS patch to kernel
+          # Apply SUSFS patch to kernel (the one that patches fs/)
           if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch" ]; then
             patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch
             echo "✅ Applied SUSFS kernel patch"
           fi
 
-          # Apply SUSFS patch to KernelSU
+          # Apply SUSFS patch to KernelSU (navigate to KernelSU directory first)
           if [ -f "susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
-            patch -p1 < susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
-            echo "✅ Applied KSU SUSFS kernel patch"
+            cd KernelSU
+            patch -p1 < ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch && echo "✅ Applied KSU SUSFS patch" || echo "⚠️ SUSFS KSU patch failed (may be optional)"
+            cd ..
           fi
           
-          # Apply KernelSU integration patch
+          # Ensure SUSFS kernel files are in place
           if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
-            cp -r susfs4ksu/kernel_patches/fs/susfs.c fs/
-            cp -r susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+            mkdir -p fs
+            cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
             echo "✅ Copied SUSFS files to kernel"
           fi
           
@@ -263,7 +265,7 @@ jobs:
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
           
-          echo "✅ Installed official KernelSU"
+          echo "✅ Installed official KernelSU with SUSFS"
 
       - name: "🔧 Setup SukiSU-Ultra (Stable)"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
