@@ -1,4 +1,4 @@
-name: "Build kernels"
+name: "Build kernels Test"
 
 env:
   OUT_DIR: "out"
@@ -213,7 +213,7 @@ jobs:
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
           # Copy SUSFS files to KernelSU
-          cp -r susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/
+          cp -r susfs4ksu/kernel_patches/* KernelSU/kernel/
           
           # Apply SUSFS patch to kernel
           if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch" ]; then
