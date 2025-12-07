@@ -37,6 +37,14 @@ on:
           - "noksu"
           - "ksu"
           - "both"
+      ksuVariant:
+        description: "KSU implementation (if KSU enabled)"
+        required: true
+        type: choice
+        default: "sukisu-ultra"
+        options:
+          - "kernelsu"
+          - "sukisu-ultra"
       optimizationLevel:
         description: "Compiler optimization level"
         required: false
@@ -192,13 +200,78 @@ jobs:
           echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
 
-      - name: "🔧 Setup KernelSU (KSU variant only)"
-        if: matrix.variant == 'ksu'
+      - name: "🔧 Setup KernelSU - Official"
+        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'kernelsu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           rm -rf ./KernelSU ./drivers/kernelsu
           
-          # Install KernelSU with SUSFS
+          # Install official KernelSU
+          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s main
+
+          # Clone SUSFS4KSU repository
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          
+          # Copy SUSFS files to KernelSU
+          cp -r susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/
+          
+          # Apply SUSFS patch to kernel
+          if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch" ]; then
+            patch -p1 < susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch
+            echo "✅ Applied SUSFS kernel patch"
+          fi
+
+          # Apply SUSFS patch to KernelSU
+          if [ -f "susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
+            patch -p1 < susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
+            echo "✅ Applied KSU SUSFS kernel patch"
+          fi
+          
+          # Apply KernelSU integration patch
+          if [ -f "susfs4ksu/kernel_patches/fs/susfs.c" ]; then
+            cp -r susfs4ksu/kernel_patches/fs/susfs.c fs/
+            cp -r susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/
+            echo "✅ Copied SUSFS files to kernel"
+          fi
+          
+          # Cleanup
+          rm -rf susfs4ksu
+
+          # Add KSU configs
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          EOF
+          
+          echo "✅ Installed official KernelSU"
+
+      - name: "🔧 Setup SukiSU-Ultra (Stable)"
+        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          rm -rf ./KernelSU ./drivers/kernelsu
+          
+          # Install SukiSU-Ultra with SUSFS
           curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
           # Apply SUSFS patch
@@ -235,6 +308,8 @@ jobs:
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
+          
+          echo "✅ Installed SukiSU-Ultra with SUSFS"
 
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
@@ -243,8 +318,8 @@ jobs:
           BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
-      - name: "🩹 Apply KPM patch (KSU variant only)"
-        if: matrix.variant == 'ksu'
+      - name: "🩹 Apply KPM patch (SukiSU-Ultra only)"
+        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
         working-directory: ${{ env.WORK_DIR }}/out/dist
         run: |
           curl -LSs "https://raw.githubusercontent.com/SukiSU-Ultra/SukiSU_patch/refs/heads/main/kpm/patch_linux" -o patch
@@ -255,13 +330,19 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          cp out/dist/Image Image.${{ matrix.variant }}
+          VARIANT_NAME="${{ matrix.variant }}"
+          if [ "${{ matrix.variant }}" == "ksu" ]; then
+            VARIANT_NAME="${{ matrix.variant }}-${{ github.event.inputs.ksuVariant }}"
+          fi
+          cp out/dist/Image Image.$VARIANT_NAME
+          echo "ARTIFACT_NAME=kernel-${VARIANT_NAME}-${{ github.event.inputs.optimizationLevel }}-${{ github.event.inputs.tickRate }}hz" >> $GITHUB_ENV
+          echo "IMAGE_NAME=Image.$VARIANT_NAME" >> $GITHUB_ENV
 
       - name: "📤 Upload kernel"
         uses: actions/upload-artifact@v4
         with:
-          name: kernel-${{ matrix.variant }}-${{ github.event.inputs.optimizationLevel }}-${{ github.event.inputs.tickRate }}hz
-          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}
+          name: ${{ env.ARTIFACT_NAME }}
+          path: ${{ env.WORK_DIR }}/${{ env.IMAGE_NAME }}
           retention-days: 3
 
   Package-Kernels:
@@ -282,8 +363,12 @@ jobs:
           # Copy kernels
           find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
           
-          # Create ZIP with optimization info
-          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${{ github.event.inputs.optimizationLevel }}_${{ github.event.inputs.tickRate }}hz_${BUILD_TIME}.zip"
+          # Create ZIP with optimization and KSU variant info
+          KSU_INFO=""
+          if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
+            KSU_INFO="_${{ github.event.inputs.ksuVariant }}"
+          fi
+          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}${KSU_INFO}_${{ github.event.inputs.optimizationLevel }}_${{ github.event.inputs.tickRate }}hz_${BUILD_TIME}.zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
@@ -301,11 +386,17 @@ jobs:
         if: always()
         run: |
           if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+            KSU_TEXT=""
+            if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
+              KSU_TEXT="
+          KSU Variant: ${{ github.event.inputs.ksuVariant }}"
+            fi
+            
             CAPTION="✅ Kernel Build Complete
           Branch: ${{ github.event.inputs.kernelBranch }}
           Optimization: -${{ github.event.inputs.optimizationLevel }}
           Tick Rate: ${{ github.event.inputs.tickRate }}Hz
-          Variants: ${{ github.event.inputs.buildKSU }}
+          Variants: ${{ github.event.inputs.buildKSU }}${KSU_TEXT}
           Time: $(date '+%Y-%m-%d %H:%M:%S')"
             
             curl -s -F document=@"${{ env.ZIP_PATH }}" \
