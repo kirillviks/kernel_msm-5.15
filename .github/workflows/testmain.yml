@@ -162,21 +162,29 @@ jobs:
           esac
           
           # Remove existing tick rate configs
+          sed -i '/^CONFIG_NO_HZ=/d' "$CONFIG_FILE"
           sed -i '/^CONFIG_HZ=/d' "$CONFIG_FILE"
+          sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
+          sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
+          sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
+          sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
           
           # Apply selected tick rate
           case "${{ github.event.inputs.tickRate }}" in
             100)
               echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
               echo "CONFIG_HZ=100" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_100=y" >> "$CONFIG_FILE"
               ;;
             250)
               echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
               echo "CONFIG_HZ=250" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_250=y" >> "$CONFIG_FILE"
               ;;
             300)
               echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
               echo "CONFIG_HZ=300" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_300=y" >> "$CONFIG_FILE"
               ;;
           esac
           
