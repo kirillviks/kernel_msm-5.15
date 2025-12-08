@@ -222,34 +222,31 @@ jobs:
           # Clone SUSFS4KSU
           git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
           
-          # List available patches for debugging
-          echo "📋 Available patches:"
-          ls -la susfs4ksu/kernel_patches/ || true
-          
           # Step 1: Apply kernel patches (fs/ and include/)
           echo "🔧 Applying kernel SUSFS patches..."
           
-          # Try to find the correct patch file
-          KERNEL_PATCH=""
-          if [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch" ]; then
-            KERNEL_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_kernel-5.15.patch"
-          elif [ -f "susfs4ksu/kernel_patches/50_add_susfs_in_kernel.patch" ]; then
-            KERNEL_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_kernel.patch"
-          fi
+          # The correct patch file name for gki-android13-5.15 branch
+          KERNEL_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
           
-          if [ -n "$KERNEL_PATCH" ]; then
-            patch -p1 < "$KERNEL_PATCH" && echo "✅ Applied SUSFS kernel patch" || echo "⚠️ SUSFS kernel patch failed"
+          if [ -f "$KERNEL_PATCH" ]; then
+            if patch -p1 < "$KERNEL_PATCH"; then
+              echo "✅ Applied SUSFS kernel patch successfully"
+            else
+              echo "⚠️ SUSFS kernel patch failed, trying direct file copy..."
+              # Copy files directly if patch fails
+              if [ -d "susfs4ksu/kernel_patches/fs" ]; then
+                mkdir -p fs
+                cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/ && echo "✅ Copied fs/susfs.c"
+              fi
+              if [ -d "susfs4ksu/kernel_patches/include/linux" ]; then
+                mkdir -p include/linux
+                cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/ && echo "✅ Copied include/linux/susfs.h"
+              fi
+            fi
           else
-            echo "⚠️ SUSFS kernel patch not found, copying files directly..."
-            # Copy files directly if patch not found
-            if [ -d "susfs4ksu/kernel_patches/fs" ]; then
-              mkdir -p fs
-              cp -rf susfs4ksu/kernel_patches/fs/susfs.c fs/ 2>/dev/null && echo "✅ Copied fs/susfs.c" || echo "⚠️ Failed to copy fs/susfs.c"
-            fi
-            if [ -d "susfs4ksu/kernel_patches/include/linux" ]; then
-              mkdir -p include/linux
-              cp -rf susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/ 2>/dev/null && echo "✅ Copied include/linux/susfs.h" || echo "⚠️ Failed to copy include/linux/susfs.h"
-            fi
+            echo "❌ Patch file not found: $KERNEL_PATCH"
+            echo "Available files in kernel_patches/:"
+            ls -la susfs4ksu/kernel_patches/ || true
           fi
           
           # Step 2: Copy SUSFS KernelSU files
@@ -261,16 +258,19 @@ jobs:
           
           # Step 3: Apply KernelSU patch
           echo "🔧 Applying SUSFS KernelSU integration patch..."
-          if [ -f "susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch" ]; then
+          KSU_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+          
+          if [ -f "$KSU_PATCH" ]; then
             cd KernelSU
-            if patch -p1 --dry-run < ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch >/dev/null 2>&1; then
-              patch -p1 < ../susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch
-              echo "✅ Applied KernelSU SUSFS patch"
+            if patch -p1 --dry-run < ../$KSU_PATCH >/dev/null 2>&1; then
+              patch -p1 < ../$KSU_PATCH
+              echo "✅ Applied KernelSU SUSFS patch successfully"
+              cd ..
             else
               echo "⚠️ KernelSU SUSFS patch failed, applying manual integration..."
               cd ..
               
-              # Manual integration
+              # Manual integration fallback
               if ! grep -q "linux/susfs.h" KernelSU/kernel/ksu.c; then
                 sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' KernelSU/kernel/ksu.c
                 echo "✅ Added SUSFS header to ksu.c"
@@ -288,9 +288,9 @@ jobs:
                 fi
               fi
             fi
-            cd "$OLDPWD"
           else
-            echo "⚠️ KernelSU patch file not found, using manual integration..."
+            echo "❌ KernelSU patch file not found: $KSU_PATCH"
+            echo "Using manual integration..."
             # Manual integration fallback
             if ! grep -q "linux/susfs.h" KernelSU/kernel/ksu.c; then
               sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' KernelSU/kernel/ksu.c
@@ -300,6 +300,13 @@ jobs:
             if ! grep -q "susfs_init" KernelSU/kernel/ksu.c; then
               sed -i '/ksu_core_init()/a \\tsusfs_init();' KernelSU/kernel/ksu.c
               echo "✅ Added SUSFS initialization"
+            fi
+            
+            if [ -f "KernelSU/kernel/manager.h" ]; then
+              if ! grep -q "SUSFS_FOR_KSU_MANAGER_UID" KernelSU/kernel/manager.h; then
+                sed -i '/define KSU_MANAGER_UID_MIN/a #define SUSFS_FOR_KSU_MANAGER_UID KSU_MANAGER_UID_MIN' KernelSU/kernel/manager.h
+                echo "✅ Added SUSFS manager UID define"
+              fi
             fi
           fi
           
