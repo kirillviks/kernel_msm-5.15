@@ -342,7 +342,7 @@ jobs:
         run: |
           VARIANT_NAME="${{ matrix.variant }}"
           if [ "${{ matrix.variant }}" == "ksu" ]; then
-            VARIANT_NAME="${{ matrix.variant }}-${{ github.event.inputs.ksuVariant }}"
+            VARIANT_NAME="${{ matrix.variant }}"
           fi
           cp out/dist/Image Image.$VARIANT_NAME
           echo "ARTIFACT_NAME=kernel-${VARIANT_NAME}-${{ github.event.inputs.optimizationLevel }}-${{ github.event.inputs.tickRate }}hz" >> $GITHUB_ENV
