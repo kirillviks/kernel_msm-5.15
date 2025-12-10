@@ -46,6 +46,7 @@ on:
           - "kernelsu"
           - "sukisu-ultra"
           - "rksu"
+          - "wildksu"
       optimizationLevel:
         description: "Compiler optimization level"
         required: false
@@ -406,6 +407,101 @@ jobs:
           EOF
           
           echo "✅ Installed rKSU with SUSFS"
+
+      - name: "🔧 Setup Wild KSU with SUSFS"
+        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'wildksu'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          rm -rf ./KernelSU ./drivers/kernelsu
+          
+          echo "📦 Installing Wild KSU..."
+          
+          # Clone Wild KSU
+          git clone --depth=1 https://github.com/WildKernels/Wild_KSU.git -b susfs
+          
+          # Verify cloning
+          if [ ! -d "Wild_KSU" ]; then
+            echo "❌ Failed to clone Wild KSU"
+            exit 1
+          fi
+          
+          echo "✔ Wild KSU cloned successfully"
+          
+          # Clone SUSFS4KSU for kernel patches only (not KSU integration)
+          echo "📦 Cloning SUSFS4KSU for kernel patches..."
+          git clone --depth=1 https://github.com/belowzeroiq/susfs4ksu.git -b wild
+          
+          SUSFS_KERNEL_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          
+          echo "🔧 Applying SUSFS kernel patch..."
+          if patch -p1 < "$SUSFS_KERNEL_PATCH"; then
+            echo "✅ SUSFS patch successfully applied"
+          else
+            echo "⚠️ SUSFS patch failed — copying files manually"
+          fi
+
+          echo "📄 Forcing SUSFS source injection..."
+          
+          # Always replace fs/susfs.c
+          mkdir -p fs
+          cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
+          echo "✔ Copied fs/susfs.c"
+          
+          # Always replace include/linux/susfs.h
+          mkdir -p include/linux
+          cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
+          echo "✔ Copied include/linux/susfs.h"
+          
+          # Also install missing susfs_def.h
+          if [ -f susfs4ksu/kernel_patches/include/linux/susfs_def.h ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
+            echo "✔ Copied include/linux/susfs_def.h"
+          else
+            echo "⚠️ susfs_def.h not found in repo"
+          fi
+          
+          echo "🔍 Verifying SUSFS files..."
+          for f in fs/susfs.c include/linux/susfs.h include/linux/susfs_def.h; do
+            if [ -f "$f" ]; then echo "✔ Found: $f"; else echo "❌ Missing: $f"; fi
+          done
+          
+          # Clean up SUSFS repo (we only needed kernel patches, not KSU integration)
+          rm -rf susfs4ksu
+          
+          # Create symbolic link for drivers/kernelsu (if needed by build system)
+          if [ ! -L "drivers/kernelsu" ]; then
+            ln -sf ../KernelSU drivers/kernelsu
+            echo "✔ Created drivers/kernelsu symlink"
+          fi
+          
+          # Add Wild KSU configs with SUSFS
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_OVERLAY_FS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          EOF
+          
+          echo "🎉 Wild KSU with SUSFS kernel patches fully integrated!"
 
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
