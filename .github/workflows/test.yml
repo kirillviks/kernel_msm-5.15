@@ -439,7 +439,10 @@ jobs:
           else
             echo "⚠️ SUSFS patch failed — copying files manually"
           fi
-
+          
+          echo "🔧 Applying SUSFS -> KernelSU patch..."
+          KSU_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+          
           echo "📄 Forcing SUSFS source injection..."
           
           # Always replace fs/susfs.c
