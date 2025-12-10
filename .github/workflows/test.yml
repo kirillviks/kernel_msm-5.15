@@ -415,17 +415,11 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           echo "📦 Installing Wild KSU..."
+
+          # Install WildKSU with SUSFS
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s susfs
           
-          # Clone Wild KSU
-          git clone --depth=1 https://github.com/WildKernels/Wild_KSU.git -b susfs
-          
-          # Verify cloning
-          if [ ! -d "Wild_KSU" ]; then
-            echo "❌ Failed to clone Wild KSU"
-            exit 1
-          fi
-          
-          echo "✔ Wild KSU cloned successfully"
+          echo "✔ Wild KSU installed successfully"
           
           # Clone SUSFS4KSU for kernel patches only (not KSU integration)
           echo "📦 Cloning SUSFS4KSU for kernel patches..."
@@ -439,7 +433,7 @@ jobs:
           else
             echo "⚠️ SUSFS patch failed — copying files manually"
           fi
-          
+
           echo "🔧 Applying SUSFS -> KernelSU patch..."
           KSU_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
           
@@ -505,7 +499,7 @@ jobs:
           EOF
           
           echo "🎉 Wild KSU with SUSFS kernel patches fully integrated!"
-
+  
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
         run: |
