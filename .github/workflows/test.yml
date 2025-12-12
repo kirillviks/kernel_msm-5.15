@@ -322,6 +322,7 @@ jobs:
           wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
           patch -p1 -F 3 < dirtyhymofs.patch
           echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
+          echo "✅ Installed HymoFS with SUSFS Support"
 
       - name: "🔧 Setup SukiSU-Ultra (Stable)"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
@@ -369,6 +370,12 @@ jobs:
           
           echo "✅ Installed SukiSU-Ultra with SUSFS"
 
+          # Add HymoFS support
+          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
+          patch -p1 -F 3 < dirtyhymofs.patch
+          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
+          echo "✅ Installed HymoFS with SUSFS Support"
+
       - name: "🔧 Setup rKSU"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'rksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -412,6 +419,12 @@ jobs:
           EOF
           
           echo "✅ Installed rKSU with SUSFS"
+
+          # Add HymoFS support
+          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
+          patch -p1 -F 3 < dirtyhymofs.patch
+          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
+          echo "✅ Installed HymoFS with SUSFS Support"
 
       - name: "🔧 Setup Wild KSU with SUSFS"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'wildksu'
