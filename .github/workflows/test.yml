@@ -318,12 +318,6 @@ jobs:
 
           echo "🎉 Official KernelSU + SUSFS fully integrated!"
 
-          # Add HymoFS support
-          wget https://raw.githubusercontent.com/anatdx/HymoFS/main/patch/hymofs_with_susfs.patch
-          patch -p1 -F 3 < hymofs_with_susfs.patch
-          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
-          echo "✅ Installed HymoFS with SUSFS Support"
-
       - name: "🔧 Setup SukiSU-Ultra (Stable)"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
@@ -331,7 +325,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           # Install SukiSU-Ultra with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s tmp-builtin
           
           # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
@@ -369,12 +363,6 @@ jobs:
           EOF
           
           echo "✅ Installed SukiSU-Ultra with SUSFS"
-
-          # Add HymoFS support
-          wget https://raw.githubusercontent.com/anatdx/HymoFS/main/patch/hymofs_with_susfs.patch
-          patch -p1 -F 3 < hymofs_with_susfs.patch
-          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
-          echo "✅ Installed HymoFS with SUSFS Support"
 
       - name: "🔧 Setup rKSU"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'rksu'
@@ -419,12 +407,6 @@ jobs:
           EOF
           
           echo "✅ Installed rKSU with SUSFS"
-
-          # Add HymoFS support
-          wget https://raw.githubusercontent.com/anatdx/HymoFS/main/patch/hymofs_with_susfs.patch
-          patch -p1 -F 3 < hymofs_with_susfs.patch
-          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
-          echo "✅ Installed HymoFS with SUSFS Support"
 
       - name: "🔧 Setup Wild KSU with SUSFS"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'wildksu'
@@ -517,12 +499,6 @@ jobs:
           EOF
           
           echo "🎉 Wild KSU with SUSFS kernel patches fully integrated!"
-
-          # Add HymoFS support
-          wget https://raw.githubusercontent.com/anatdx/HymoFS/main/patch/hymofs_with_susfs.patch
-          patch -p1 -F 3 < hymofs_with_susfs.patch
-          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
-          echo "✅ Installed HymoFS with SUSFS Support"
   
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
