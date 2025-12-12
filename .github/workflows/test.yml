@@ -207,7 +207,7 @@ jobs:
           echo "✅ Applied -${{ github.event.inputs.optimizationLevel }} optimization"
           echo "✅ Applied ${{ github.event.inputs.tickRate }}Hz tick rate"
 
-      - name: Disable C99 declaration error (KSU only)
+      - name: "⚙️ Disable C99 declaration error (KSU only) "
         if: matrix.variant == 'ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
@@ -337,7 +337,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           # Install SukiSU-Ultra with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s tmp-builtin
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
           # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
