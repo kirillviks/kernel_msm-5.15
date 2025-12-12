@@ -253,12 +253,12 @@ jobs:
           echo "✅ Applied -${{ github.event.inputs.optimizationLevel }} optimization"
           echo "✅ Applied ${{ github.event.inputs.tickRate }}Hz tick rate"
 
-      - name: "⚙️ Disable C99 declaration error (KSU only) "
-        if: matrix.variant == 'ksu'
+      - name: "⚙️ Remove strict warnings from Makefile"
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           sed -i '/KBUILD_CFLAGS += -Wdeclaration-after-statement/d' Makefile
-          echo 'KCFLAGS += -Wno-error=declaration-after-statement' >> Makefile
+          sed -i '/KBUILD_CFLAGS += -Werror=unused-function/d' Makefile
+          sed -i '/KBUILD_CFLAGS += -Wunused-function/d' Makefile
 
       - name: "🔧 Add BBG Support (KSU variant only)"
         if: matrix.variant == 'ksu'
