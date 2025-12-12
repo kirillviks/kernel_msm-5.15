@@ -207,12 +207,6 @@ jobs:
           echo "✅ Applied -${{ github.event.inputs.optimizationLevel }} optimization"
           echo "✅ Applied ${{ github.event.inputs.tickRate }}Hz tick rate"
 
-      - name: "⚙️ Disable C99 declaration error (KSU only) "
-        if: matrix.variant == 'ksu'
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        run: |
-          echo 'KCFLAGS += -Wno-error=declaration-after-statement' >> Makefile
-
       - name: "🔧 Add BBG Support (KSU variant only)"
         if: matrix.variant == 'ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
