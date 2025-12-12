@@ -319,8 +319,8 @@ jobs:
           echo "🎉 Official KernelSU + SUSFS fully integrated!"
 
           # Add HymoFS support
-          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
-          patch -p1 -F 3 < dirtyhymofs.patch
+          wget https://github.com/Anatdx/HymoFS/blob/main/patch/hymofs_with_susfs.patch
+          patch -p1 -F 3 < hymofs_with_susfs.patch
           echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
           echo "✅ Installed HymoFS with SUSFS Support"
 
@@ -371,8 +371,8 @@ jobs:
           echo "✅ Installed SukiSU-Ultra with SUSFS"
 
           # Add HymoFS support
-          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
-          patch -p1 -F 3 < dirtyhymofs.patch
+          wget https://github.com/Anatdx/HymoFS/blob/main/patch/hymofs_with_susfs.patch
+          patch -p1 -F 3 < hymofs_with_susfs.patch
           echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
           echo "✅ Installed HymoFS with SUSFS Support"
 
@@ -421,8 +421,8 @@ jobs:
           echo "✅ Installed rKSU with SUSFS"
 
           # Add HymoFS support
-          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
-          patch -p1 -F 3 < dirtyhymofs.patch
+          wget https://github.com/Anatdx/HymoFS/blob/main/patch/hymofs_with_susfs.patch
+          patch -p1 -F 3 < hymofs_with_susfs.patch
           echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
           echo "✅ Installed HymoFS with SUSFS Support"
 
@@ -517,6 +517,12 @@ jobs:
           EOF
           
           echo "🎉 Wild KSU with SUSFS kernel patches fully integrated!"
+
+          # Add HymoFS support
+          wget https://github.com/Anatdx/HymoFS/blob/main/patch/hymofs_with_susfs.patch
+          patch -p1 -F 3 < hymofs_with_susfs.patch
+          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
+          echo "✅ Installed HymoFS with SUSFS Support"
   
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
