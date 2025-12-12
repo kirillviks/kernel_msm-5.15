@@ -318,6 +318,11 @@ jobs:
 
           echo "🎉 Official KernelSU + SUSFS fully integrated!"
 
+          # Add HymoFS support
+          wget https://raw.githubusercontent.com/Anatdx/HymoFS/refs/heads/main/patch/dirtyhymofs.patch
+          patch -p1 -F 3 < dirtyhymofs.patch
+          echo "CONFIG_HYMOFS=y" >> "$CONFIG_FILE"
+
       - name: "🔧 Setup SukiSU-Ultra (Stable)"
         if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'sukisu-ultra'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
