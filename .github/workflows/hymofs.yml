@@ -259,7 +259,11 @@ jobs:
           sed -i '/KBUILD_CFLAGS += -Wdeclaration-after-statement/d' Makefile
           sed -i '/KBUILD_CFLAGS += -Werror=unused-function/d' Makefile
           sed -i '/KBUILD_CFLAGS += -Wunused-function/d' Makefile
-
+          sed -i '/KBUILD_CFLAGS += -Werror=unused-variable/d' Makefile
+          sed -i '/KBUILD_CFLAGS += -Wunused-variable/d' Makefile
+          sed -i '/KBUILD_CFLAGS += -Werror=unused-result/d' Makefile
+          sed -i '/KBUILD_CFLAGS += -Wunused-result/d' Makefile
+    
       - name: "🔧 Add BBG Support (KSU variant only)"
         if: matrix.variant == 'ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
