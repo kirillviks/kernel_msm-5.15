@@ -159,7 +159,7 @@ jobs:
         run: |
           # KernelSU
           rm -rf KernelSU drivers/kernelsu
-          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s tmp-builtin
+          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s builtin
 
           # SUSFS patches
           PATCHES=$(curl -s https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest | \
