@@ -188,7 +188,7 @@ jobs:
           EOF
 
       - name: "🔧 Setup rKSU"
-        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'rksu'
+        if: matrix.variant == 'ksu' && github.event.inputs.ksuVariant == 'rissu-ksu'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           rm -rf ./KernelSU ./drivers/kernelsu
