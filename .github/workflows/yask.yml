@@ -153,7 +153,7 @@ jobs:
           echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
 
-      - name: "😋 Setup KernelSU & SUSFS & Configs"
+      - name: "😋 Setup KernelSU Implementation"
         if: matrix.kernel.enable_ksu == true
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
         run: |
@@ -273,7 +273,7 @@ jobs:
           ║     • Extra TCP Congestion                          ║
           ║     • AOSP clang-r547379                            ║
           ║     • Non-KSU & SukiSU-Ultra + KPM are available    ║
-          ║     • Mountify Support                              ║
+          ║     • Metamodule Support                              ║
           ║                                                     ║
           ║     Please ensure:                                  ║
           ║     • Your device is compatible                     ║
