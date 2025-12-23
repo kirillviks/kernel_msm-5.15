@@ -160,53 +160,20 @@ jobs:
           # KernelSU
           rm -rf KernelSU drivers/kernelsu
           curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s builtin
-
-          # SUSFS patches
-          PATCHES=$(curl -s https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest | \
-                    grep -o 'browser_download_url.*\.patch' | cut -d\" -f3)
-          SELECTED=$(echo "$PATCHES" | \
-                     grep "0001-Implement-SUSFS" | \
-                     grep "Android-${{ env.ANDROID_VERSION }}" | \
-                     grep "Kernel-${{ env.KERNEL_VERSION }}" | head -n 1)
-          [ -z "$SELECTED" ] && SELECTED=$(echo "$PATCHES" | grep "0001-Implement-SUSFS" | head -n 1)
-          [ -z "$SELECTED" ] && { echo "No SUSFS patch"; exit 1; }
-
-          curl -L -o susfs.patch "$SELECTED"
-          patch -p1 < susfs.patch || echo "::warning::SUSFS hunks failed"
-          rm -f susfs.patch
-
-          # Hooks
-          # curl -L -o hooks.patch \
-          #   https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-SUSFS-syscall-hooks.patch
-          # patch -p1 < hooks.patch || echo "::warning::Hooks hunks failed"
-          # rm -f hooks.patch
           
           CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           
           # Basic optimizations
           echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
           
-          # SUSFS configs
+          # Add KSU configs
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
           cat >> "$CONFIG_FILE" << 'EOF'
           CONFIG_KSU=y
-          # CONFIG_KSU_MANUAL_HOOK is not set
-          CONFIG_KPM=y
-          CONFIG_KSU_SUSFS=y
-          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_PATH=y
-          CONFIG_KSU_SUSFS_SUS_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SUS_KSTAT=y
-          CONFIG_KSU_SUSFS_SUS_OVERLAYFS=n
-          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
-          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
-          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
-          CONFIG_KSU_SUSFS_ENABLE_LOG=y
-          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
-          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
-          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
-          CONFIG_KSU_SUSFS_SUS_SU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_OVERLAY_FS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
@@ -306,7 +273,6 @@ jobs:
           ║     • Extra TCP Congestion                          ║
           ║     • AOSP clang-r547379                            ║
           ║     • Non-KSU & SukiSU-Ultra + KPM are available    ║
-          ║     • Latest SUSFS version                          ║
           ║     • Mountify Support                              ║
           ║                                                     ║
           ║     Please ensure:                                  ║
