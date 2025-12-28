@@ -144,27 +144,14 @@ jobs:
             [ -n "$p" ] && apply_patch "$p"
           done
 
-      - name: "😋 Add BBG Support"
+      - name: "🔧 Setup rKSU"
         if: matrix.kernel.enable_ksu == true
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
-          echo "Adding BBG..."
-          wget -O- https://github.com/vc-teahouse/Baseband-guard/raw/main/setup.sh | bash
-          echo "CONFIG_BBG=y" >> arch/arm64/configs/${{ env.DEFCONFIG_NAME }}
-          sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/landlock/landlock,baseband_guard/ } }' security/Kconfig
-
-      - name: "😋 Setup KernelSU Implementation"
-        if: matrix.kernel.enable_ksu == true
-        working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
-        run: |
-          # KernelSU
-          rm -rf KernelSU drivers/kernelsu
-          curl -LSs https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh | bash -s main
+          rm -rf ./KernelSU ./drivers/kernelsu
           
-          CONFIG_FILE="./arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
-          
-          # Basic optimizations
-          echo "CONFIG_KALLSYMS=y" >> "$CONFIG_FILE"
+          # Install rKSU with SUSFS
+          curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
           
           # Add KSU configs
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
@@ -173,10 +160,9 @@ jobs:
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
           CONFIG_KPROBE_EVENTS=y
-          CONFIG_OVERLAY_FS=y
           EOF
-
-          echo "✅ KSU configs added"
+          
+          echo "✅ Installed rKSU"
 
       - name: "⚙️ Setup basic configs"
         working-directory: ${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}
@@ -195,6 +181,7 @@ jobs:
           CONFIG_TCP_CONG_HTCP=n
           CONFIG_TCP_CONG_BBR=y
           CONFIG_DEFAULT_WESTWOOD=y
+          CONFIG_OVERLAY_FS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
           EOF
@@ -207,15 +194,6 @@ jobs:
           LTO=thin \
           BUILD_CONFIG=${{ env.KERNEL_LOC_DIR }}/${{ env.KERNEL_NAME }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
-
-      - name: "🩹 Apply KPM patch"
-        if: matrix.kernel.enable_ksu == true
-        working-directory: ${{ env.WORK_DIR }}/out/dist
-        run: |
-          curl -LSs "${{ matrix.kernel.kpm_patch_url }}" -o patch
-          chmod +x patch
-          ./patch
-          mv oImage "${{ env.OUTPUT_NAME }}"
 
       - name: "📁 Copy kernel image"
         if: matrix.kernel.enable_ksu == false
@@ -272,7 +250,7 @@ jobs:
           ║     • Thin LTO + -O2 Optimization                   ║
           ║     • Extra TCP Congestion                          ║
           ║     • AOSP clang-r547379                            ║
-          ║     • Non-KSU & SukiSU-Ultra + KPM are available    ║
+          ║     • Non-KSU & rKSU support                        ║
           ║     • Metamodule Support                            ║
           ║                                                     ║
           ║     Please ensure:                                  ║
