@@ -127,7 +127,7 @@ jobs:
           rm -rf ./KernelSU ./drivers/kernelsu
           
           # Install KernelSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s susfs-main
+          curl -LSs "https://raw.githubusercontent.com/ShirkNeko/SukiSU-Ultra/main/kernel/setup.sh" | bash -s builtin
           
           # Apply SUSFS patch
           PATCH_URL="https://api.github.com/repos/topnotchfreaks/kernel_patches/releases/latest"
