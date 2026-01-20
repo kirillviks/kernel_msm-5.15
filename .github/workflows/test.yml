@@ -516,7 +516,7 @@ jobs:
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WORK_DIR }}
         run: |
-          LTO=thin \
+          LTO=full \
           BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 \
           build/build.sh -j$(nproc --all)
 
@@ -583,31 +583,62 @@ jobs:
           name: ${{ env.ZIP_NAME }}
           path: ${{ env.ZIP_PATH }}
           retention-days: 7
-
+          
       - name: "📱 Send to Telegram"
         if: always()
         run: |
-          if [[ -f "${{ env.ZIP_PATH }}" ]]; then
-            KSU_TEXT=""
-            if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
-              KSU_TEXT="
-          KSU Variant: ${{ github.event.inputs.ksuVariant }}"
-            fi
-            
-            CAPTION="✅ Kernel Build Complete
-          Branch: ${{ github.event.inputs.kernelBranch }}
-          Optimization: -${{ github.event.inputs.optimizationLevel }}
-          Tick Rate: ${{ github.event.inputs.tickRate }}Hz
-          Variants: ${{ github.event.inputs.buildKSU }}${KSU_TEXT}
-          Time: $(date '+%Y-%m-%d %H:%M:%S')"
-            
-            curl -s -F document=@"${{ env.ZIP_PATH }}" \
-                 -F caption="$CAPTION" \
-                 -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
-                 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
-          else
-            curl -s -X POST \
-                 -d chat_id=${{ secrets.TELEGRAM_USER_ID }} \
-                 -d text="❌ Kernel build failed - Optimization: -${{ github.event.inputs.optimizationLevel }}, Tick: ${{ github.event.inputs.tickRate }}Hz" \
-                 "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
-          fi
+         if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+          KSU_TEXT=""
+         if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
+          KSU_TEXT="
+         🔐 *KSU Variant:* \`${{ github.event.inputs.ksuVariant }}\`"
+         fi
+      
+         CAPTION="✅ *Kernel Build Successful*
+      
+         📦 *Build Information:*
+         • Kernel: \`Linux ${{ env.KERNEL_VERSION }}\`
+         • Android: \`13-16\`
+         • Branch: \`${{ github.event.inputs.kernelBranch }}\`
+         • Device: \`${{ github.event.inputs.kernelDevice }}\`
+    
+         ⚙️ *Configuration:*
+         • Optimization: \`-${{ github.event.inputs.optimizationLevel }}\`
+         • Tick Rate: \`${{ github.event.inputs.tickRate }}Hz\`
+         • Build Type: \`${{ github.event.inputs.buildKSU }}\`${KSU_TEXT}
+         • SUSFS: \`Enabled (GKI Android13-5.15)\`
+         • Local Version: \`${{ github.event.inputs.localVersion }}\`
+    
+         🕐 *Build Date:* $(date '+%Y-%m-%d %H:%M:%S UTC')
+         📦 *Package:* \`${{ env.ZIP_NAME }}\`"
+      
+         curl -s -F document=@"${{ env.ZIP_PATH }}" \
+           -F caption="$CAPTION" \
+           -F parse_mode="Markdown" \
+           -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+           "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
+         else
+         FAILURE_MSG="❌ *Kernel Build Failed*
+      
+         📦 *Build Information:*
+         • Kernel: \`Linux ${{ env.KERNEL_VERSION }}\`
+         • Android: \`13-16\`
+         • Branch: \`${{ github.event.inputs.kernelBranch }}\`
+         • Device: \`${{ github.event.inputs.kernelDevice }}\`
+    
+         ⚙️ *Configuration:*
+         • Optimization: \`-${{ github.event.inputs.optimizationLevel }}\`
+         • Tick Rate: \`${{ github.event.inputs.tickRate }}Hz\`
+         • Build Type: \`${{ github.event.inputs.buildKSU }}\`
+         • Local Version: \`${{ github.event.inputs.localVersion }}\`
+    
+         🕐 *Failed at:* $(date '+%Y-%m-%d %H:%M:%S UTC')
+    
+         🔍 Check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+      
+         curl -s -X POST \
+           -d chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+           -d text="$FAILURE_MSG" \
+           -d parse_mode="Markdown" \
+           "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
+         fi
