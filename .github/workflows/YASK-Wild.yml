@@ -187,7 +187,7 @@ jobs:
           
           echo "📦 Injecting SUSFS -> KernelSU integration files"
           if [ -d "susfs4ksu/kernel_patches/KernelSU/kernel" ]; then
-            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* KernelSU/kernel/
+            cp -rf susfs4ksu/kernel_patches/KernelSU/kernel/* Wild_KSU/kernel/
             echo "✔ Copied SUSFS KernelSU integration files"
           fi
 
@@ -202,13 +202,13 @@ jobs:
             else
               echo "⚠️ KSU SUSFS patch failed — applying manual fallback"
               cd ..
-              sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' KernelSU/kernel/ksu.c
-              sed -i '/ksu_core_init()/a \\tsusfs_init();' KernelSU/kernel/ksu.c
+              sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
+              sed -i '/ksu_core_init()/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
             fi
           else
             echo "⚠️ KSU patch missing — manually injecting changes"
-            sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' KernelSU/kernel/ksu.c
-            sed -i '/ksu_core_init()/a \\tsusfs_init();' KernelSU/kernel/ksu.c
+            sed -i '/#include <linux\/pid.h>/a #include <linux/susfs.h>' Wild_KSU/kernel/ksu.c
+            sed -i '/ksu_core_init()/a \\tsusfs_init();' Wild_KSU/kernel/ksu.c
           fi
           
           echo "🔍 Verifying SUSFS files..."
@@ -221,7 +221,7 @@ jobs:
           
           # Create symbolic link for drivers/kernelsu (if needed by build system)
           if [ ! -L "drivers/kernelsu" ]; then
-            ln -sf ../KernelSU drivers/kernelsu
+            ln -sf ../Wild_KSU drivers/kernelsu
             echo "✔ Created drivers/kernelsu symlink"
           fi
           
