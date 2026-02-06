@@ -1,4 +1,4 @@
-name: "Build kernels dual test"
+name: "Build kernels"
 
 env:
   OUT_DIR: "out"
@@ -37,7 +37,7 @@ on:
           - "noksu"
           - "ksu"
           - "both"
-       buildToolchains:
+      buildToolchains:
         description: "build tools"
         required: true
         type: choice
