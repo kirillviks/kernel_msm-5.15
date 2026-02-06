@@ -222,7 +222,7 @@ jobs:
           fi
 
           # String patch
-          curl -L -o string.patch "https://github.com/topnotchfreaks/kernel_patches/blob/main/0001-scripts-skip-android-version-and-kmi-strings.patch" 
+          curl -L -o string.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-skip-android-version-and-kmi-strings.patch" 
           patch -p1 < string.patch || echo "Warning: Strings patch failed"
           
           # Basic optimizations
