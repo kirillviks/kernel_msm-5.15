@@ -68,7 +68,7 @@ jobs:
           mkdir -p $kernelDir
           echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
-          sudo apt-get install -y repo rsync aria2
+          sudo apt-get install -y repo rsync aria2 build-essential bc curl flex cpio rsync git zip dwarves libelf-dev gcc-aarch64-linux-gnu libssl-dev python3 clang lld llvm llvm-dev
 
       - name: "🌟 Clone kernel source"
         working-directory: ./${{ env.kernelDir }}
@@ -116,7 +116,7 @@ jobs:
            ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
            
       - name: "💫 Get Toolchains"
-       if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchain == 'custom-tools'
         run: |
           set -e  # Exit on errors
       
