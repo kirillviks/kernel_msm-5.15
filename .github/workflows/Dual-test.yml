@@ -77,7 +77,7 @@ jobs:
             ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
 
       - name: "📥 Initialize repo"
-        if: github.event.inputs.buildToolchain == 'android-tools'
+        if: github.event.inputs.buildToolchains == 'android-tools'
         working-directory: ${{ env.WORK_DIR}}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
@@ -116,7 +116,7 @@ jobs:
            ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
            
       - name: "💫 Get Toolchains"
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         run: |
           set -e  # Exit on errors
       
@@ -187,23 +187,21 @@ jobs:
           clang --version || echo "❌ Clang not found in PATH!"
       
       - name: 📐 Setup SWAP 12GB
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         uses: pierotofy/set-swap-space@master
         with:
             swap-size-gb: 12
             
       - name: 📐 Tune Swap
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         run: |
             echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
             sudo sysctl -p
             
       - name: "😎 Set args for GKI kernels"
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         id: generate-args
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
-        env:
-            params: "${{ toJSON(matrix.repos.params) }}"
         run: |
             args="-j$(nproc --all)"
             if [ -n "${{ env.OUT_DIR }}" ]; then
@@ -218,7 +216,7 @@ jobs:
             echo "args=$args" >> $GITHUB_OUTPUT
             
       - name: "📝 Append custom Makefile line"
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           # temporary clang compiler fixup
@@ -288,6 +286,7 @@ jobs:
           EOF
 
       - name: "🔨 Build kernel"
+        if: github.event.inputs.buildToolchains == 'android-tools'
         working-directory: ${{ env.WORK_DIR }}
         run: |
           LTO=thin \
@@ -295,7 +294,7 @@ jobs:
           build/build.sh -j$(nproc --all)
           
       - name: "👍 Make defconfig"
-        if: github.event.inputs.buildToolchain == 'custom-tools'
+        if: github.event.inputs.buildToolchains == 'custom-tools'
         working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         env:
           args: ${{ steps.generate-args.outputs.args }}
