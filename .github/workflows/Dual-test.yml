@@ -330,7 +330,9 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WORK_DIR }}
         run: |
+          mkdir -p out/dist
           cp out/dist/Image Image.${{ matrix.variant }}
+          cp out/arch/arm64/boot/Image.${{ matrix.variant }} out/dist/Image
 
       - name: "📤 Upload kernel"
         uses: actions/upload-artifact@v4
