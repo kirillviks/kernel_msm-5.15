@@ -231,11 +231,11 @@ jobs:
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
 
           # Remove any existing LOCALVERSION lines to prevent duplication
-          sed -i '/^LOCALVERSION=/d' "$BUILD_CONFIG_FILE"
+          sed -i '/^LOCALVERSION=/d' "$CONFIG_FILE"
 
           # Add our custom value
           if [ -n "${{ github.event.inputs.localVersion }}" ]; then
-            echo "LOCALVERSION=${{ github.event.inputs.localVersion }}" >> "$BUILD_CONFIG_FILE"
+            echo "LOCALVERSION=${{ github.event.inputs.localVersion }}" >> "$CONFIG_FILE"
           fi
 
       - name: "🔧 Setup KernelSU - Official with SUSFS"
