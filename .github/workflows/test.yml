@@ -226,7 +226,7 @@ jobs:
           echo "✅ Applied ${{ github.event.inputs.tickRate }}Hz tick rate"
 
       - name: "🔧 Set custom localversion in build.config"
-        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
         run: |
           CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
 
