@@ -257,14 +257,13 @@ jobs:
 
       - name: "📦 Create flashable ZIP"
         run: |
-          BUILD_DATE=$(date +'%Y-%m-%d')
           git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
 
           # Copy kernels
           find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
 
           # Create ZIP
-          ZIP_NAME="AnyKernel3_${{ github.event.inputs.localVersion }}-${BUILD_DATE}.zip"
+          ZIP_NAME="AnyKernel3_${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
