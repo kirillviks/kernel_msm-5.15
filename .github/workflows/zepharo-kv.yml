@@ -231,20 +231,21 @@ jobs:
         run: |
           LTO=full \
           BUILD_CONFIG=${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki.aarch64 \
+          OUT_DIR=out \
           build/build.sh -j$(nproc --all)
 
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          mkdir -p out/{dist_${{ matrix.variant }},AnyKernel}
-          cp -r dist/* out/dist_${{ matrix.variant }}
-          mv out/dist_${{ matrix.variant }}/Image out/AnyKernel/Image.${{ matrix.variant }}
+          mkdir -p upload/{out_${{ matrix.variant }},AnyKernel}
+          cp -r out/* upload/out_${{ matrix.variant }}
+          mv upload/out_${{ matrix.variant }}/dist/Image upload/AnyKernel/Image.${{ matrix.variant }}
 
-      - name: "📤 Upload artifacts"
+      - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant }}
-          path: ${{ env.WS_WORK_DIR }}/out
+          path: ${{ env.WS_WORK_DIR }}/upload/*
           retention-days: 3
 
   Package-Kernels:
