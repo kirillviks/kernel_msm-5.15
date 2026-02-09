@@ -237,15 +237,14 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          mkdir -p "upload/{out_${{ matrix.variant }},AnyKernel}"
-          cp -r out/* upload/out_${{ matrix.variant }}
-          mv upload/out_${{ matrix.variant }}/dist/Image upload/AnyKernel/Image.${{ matrix.variant }}
+          mkdir -p out/AnyKernel
+          mv out/dist/Image out/AnyKernel/Image.${{ matrix.variant }}
 
       - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant }}
-          path: ${{ env.WS_WORK_DIR }}/upload/*
+          path: ${{ env.WS_WORK_DIR }}/out/*
           retention-days: 3
 
   Package-Kernels:
