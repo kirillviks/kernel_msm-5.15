@@ -237,7 +237,7 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          mkdir -p upload/{out_${{ matrix.variant }},AnyKernel}
+          mkdir -p "upload/{out_${{ matrix.variant }},AnyKernel}"
           cp -r out/* upload/out_${{ matrix.variant }}
           mv upload/out_${{ matrix.variant }}/dist/Image upload/AnyKernel/Image.${{ matrix.variant }}
 
