@@ -238,7 +238,7 @@ jobs:
         run: |
           mkdir -p out/{dist_${{ matrix.variant }},AnyKernel}
           cp -r dist/* out/dist_${{ matrix.variant }}
-          cp dist/Image out/AnyKernel/Image.${{ matrix.variant }}
+          mv out/dist_${{ matrix.variant }}/Image out/AnyKernel/Image.${{ matrix.variant }}
 
       - name: "📤 Upload artifacts"
         uses: actions/upload-artifact@v4
