@@ -236,13 +236,15 @@ jobs:
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          cp out/dist/Image Image.${{ matrix.variant }}
+          mkdir -p out/{dist_${{ matrix.variant }},AnyKernel}
+          cp -r dist/* out/dist_${{ matrix.variant }}
+          cp dist/Image out/AnyKernel/Image.${{ matrix.variant }}
 
-      - name: "📤 Upload kernel"
+      - name: "📤 Upload artifacts"
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant }}
-          path: ${{ env.WS_WORK_DIR }}/Image.${{ matrix.variant }}
+          path: ${{ env.WS_WORK_DIR }}/out
           retention-days: 3
 
   Package-Kernels:
@@ -260,7 +262,7 @@ jobs:
           git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
 
           # Copy kernels
-          find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
+          find kernels/AnyKernel -name "Image.*" -exec cp {} AnyKernel3/ \;
 
           # Create ZIP
           ZIP_NAME="AnyKernel3_${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
