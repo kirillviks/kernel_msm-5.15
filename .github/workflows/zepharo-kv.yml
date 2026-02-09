@@ -120,7 +120,7 @@ jobs:
           fi
 
           # Remove existing optimization configs and apply O3 optimization level
-          sed -i '/CONFIG_CC_OPTIMIZE/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE/d' ${{ env.WS_CONFIG_FILE }}
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> ${{ env.WS_CONFIG_FILE }}
 
           cat >> ${{ env.WS_CONFIG_FILE }} << 'EOF'
