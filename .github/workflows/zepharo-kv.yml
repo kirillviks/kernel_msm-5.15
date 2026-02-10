@@ -261,7 +261,7 @@ jobs:
           git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
 
           # Copy kernels
-          find kernels/AnyKernel -name "Image.*" -exec cp {} AnyKernel3/ \;
+          find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
 
           # Create ZIP
           ZIP_NAME="AnyKernel3_${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
