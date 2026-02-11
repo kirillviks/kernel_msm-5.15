@@ -2,36 +2,13 @@ name: "Build ZepharoKV"
 
 on:
   workflow_dispatch:
-    inputs:
-      kernelSourceURL:
-        description: "Kernel source URL"
-        required: true
-        type: string
-        default: "https://github.com/topnotchfreaks/kernel_msm-5.15"
-      kernelBranch:
-        description: "Kernel branch"
-        required: false
-        type: string
-        default: "zepharo-new"
-      kernelDevice:
-        description: "Device (used for defconfig)"
-        required: true
-        type: string
-        default: "unified"
-      localVersion:
-        description: "Custom localversion name (e.g., -mybuild)"
-        required: false
-        type: string
-        default: "-ZepharoKV"
-      buildKSU:
-        description: "Build KSU variant?"
-        required: true
-        type: choice
-        default: "ksu"
-        options:
-          - "noksu"
-          - "ksu"
-          - "both"
+
+env:
+  WS_WORK_DIR: ${{ github.workspace }}
+  WS_KERNEL_SOURCE: https://github.com/topnotchfreaks/kernel_msm-5.15
+  WS_KERNEL_SOURCE_BRANCH: zepharo-new
+  WS_KERNEL_LOCALVERSION: ZepharoKV
+  WS_KERNEL_CONFIG_FILE: arch/arm64/configs/unified_defconfig
 
 jobs:
   Build-Kernel:
@@ -39,22 +16,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        variant: ${{ fromJSON(
-          inputs.buildKSU == 'both' && '["noksu", "ksu"]' ||
-          inputs.buildKSU == 'ksu' && '["ksu"]' ||
-          '["noksu"]' ) }}
-
-    env:
-      WS_KERNEL_DIR: common_${{ github.event.inputs.kernelDevice }}
-      WS_KERNEL_NAME: common
-      WS_CONFIG_FILE: arch/arm64/configs/${{ github.event.inputs.kernelDevice }}_defconfig
-      WS_WORK_DIR: ${{ github.workspace }}
+        variant: [ksu, noksu]
 
     steps:
       - name: "✨ Setup workspace"
         run: |
-          mkdir -p ${{ env.WS_KERNEL_DIR }}
-          echo "BUILD_DATE=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2
 
@@ -68,19 +34,15 @@ jobs:
           sudo sysctl -p
 
       - name: "🌟 Clone kernel source"
-        working-directory: ./${{ env.WS_KERNEL_DIR }}
+        working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
-            ${{ github.event.inputs.kernelSourceURL }} ${{ env.WS_KERNEL_NAME }} --depth=1
+          git clone ${{ env.WS_KERNEL_SOURCE }} ${{ env.WS_KERNEL_LOCALVERSION }} --recursive --branch ${{ env.WS_KERNEL_SOURCE_BRANCH }} --depth=1
 
       - name: "📥 Initialize repo"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
           repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
-
-          rm -rf .repo
-          rm -rf common
 
           aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
           mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
@@ -94,10 +56,10 @@ jobs:
           sed -i \
            -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
            -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
-           ${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.constants
+           ${{ env.WS_KERNEL_LOCALVERSION }}/build.config.constants
 
-          sed -i 's/^DEFCONFIG=.*/DEFCONFIG=${{ github.event.inputs.kernelDevice }}_defconfig/' ${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki
-          sed -i '/^POST_DEFCONFIG_CMDS/d' ${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki
+          sed -i 's/^DEFCONFIG=.*/DEFCONFIG=unified_defconfig/' ${{ env.WS_KERNEL_LOCALVERSION }}/build.config.gki
+          sed -i '/^POST_DEFCONFIG_CMDS/d' ${{ env.WS_KERNEL_LOCALVERSION }}/build.config.gki
 
           sed -i \
            -e '/^KMI_SYMBOL_LIST_STRICT_MODE=/d' \
@@ -108,22 +70,22 @@ jobs:
            -e '$a\KMI_ENFORCED=0' \
            -e '/^MODULES_ORDER=/d' \
            -e '/^MODULES_LIST=/d' \
-           ${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki.aarch64
+           ${{ env.WS_KERNEL_LOCALVERSION }}/build.config.gki.aarch64
 
       - name: "⚙️ Configure kernel"
-        working-directory: ./${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}
+        working-directory: ${{ env.WS_KERNEL_LOCALVERSION }}
         run: |
           # Set localversion
-          if [ -n "${{ github.event.inputs.localVersion }}" ]; then
-            echo "CONFIG_LOCALVERSION=\"${{ github.event.inputs.localVersion }}-${{ env.BUILD_DATE }}\"" >> ${{ env.WS_CONFIG_FILE }}
-            echo "CONFIG_LOCALVERSION_AUTO=n" >> ${{ env.WS_CONFIG_FILE }}
+          if [ -n "${{ env.WS_KERNEL_LOCALVERSION }}" ]; then
+            echo "CONFIG_LOCALVERSION=\"${{ env.WS_KERNEL_LOCALVERSION }}-$(date +'%Y-%m-%d')\"" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
+            echo "CONFIG_LOCALVERSION_AUTO=n" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
           fi
 
           # Remove existing optimization configs and apply O3 optimization level
-          sed -i '/CONFIG_CC_OPTIMIZE/d' ${{ env.WS_CONFIG_FILE }}
-          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> ${{ env.WS_CONFIG_FILE }}
+          sed -i '/CONFIG_CC_OPTIMIZE/d' ${{ env.WS_KERNEL_CONFIG_FILE }}
+          echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
 
-          cat >> ${{ env.WS_CONFIG_FILE }} << 'EOF'
+          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << 'EOF'
           CONFIG_KALLSYMS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
@@ -131,14 +93,14 @@ jobs:
 
       - name: "🔧 Setup Wild KSU with SUSFS"
         if: matrix.variant == 'ksu'
-        working-directory: ./${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}
+        working-directory: ${{ env.WS_KERNEL_LOCALVERSION }}
         run: |
           rm -rf ./KernelSU ./drivers/kernelsu
 
           echo "📦 Installing Wild KSU..."
 
           # Install WildKSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s v3.0.0
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
 
           echo "✔ Wild KSU installed successfully"
 
@@ -193,7 +155,7 @@ jobs:
           fi
 
           # Add Wild KSU configs with SUSFS
-          cat >> ${{ env.WS_CONFIG_FILE }} << 'EOF'
+          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << 'EOF'
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
@@ -220,19 +182,16 @@ jobs:
 
       - name: "🔧 Setup Baseband-guard"
         if: matrix.variant == 'ksu'
-        working-directory: ./${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}
+        working-directory: ${{ env.WS_KERNEL_LOCALVERSION }}
         run: |
-          curl -LSs "https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh" | bash -s v1.1
-          echo "CONFIG_BBG=y" >> ${{ env.WS_CONFIG_FILE }}
+          curl -LSs "https://raw.githubusercontent.com/vc-teahouse/Baseband-guard/main/setup.sh" | bash
+          echo "CONFIG_BBG=y" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
       - name: "🔨 Build kernel"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          LTO=full \
-          BUILD_CONFIG=${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki.aarch64 \
-          DIST_DIR=dist \
-          build/build.sh -j$(nproc --all)
+          LTO=full BUILD_CONFIG=${{ env.WS_KERNEL_LOCALVERSION }}/build.config.gki.aarch64 DIST_DIR=dist build/build.sh -j$(nproc --all)
 
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
@@ -254,35 +213,38 @@ jobs:
       - name: "📥 Download artifacts"
         uses: actions/download-artifact@v4
         with:
-          path: ./kernels/
+          path: kernels
 
       - name: "📦 Create flashable ZIP"
         run: |
+          WS_ANYKERNEL3_NAME=AnyKernel3-${{ env.WS_KERNEL_LOCALVERSION }}-$(date +'%Y-%m-%d')
+          echo "WS_ANYKERNEL3_NAME=$WS_ANYKERNEL3_NAME" >> $GITHUB_ENV
+
           git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
 
           # Copy kernels
-          find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
+          find kernels -name "Image.*" -exec cp {} AnyKernel3 \;
 
           # Create ZIP
-          ZIP_NAME="AnyKernel3-${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
           cd AnyKernel3
-          zip -r9 "../$ZIP_NAME" * -x .git/*
+          rm -rf .git
+          zip -r9 "../$WS_ANYKERNEL3_NAME.zip" *
           cd ..
-          echo "ZIP_PATH=$(pwd)/$ZIP_NAME" >> $GITHUB_ENV
-          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+          echo "WS_ANYKERNEL3_ZIP_PATH=$(pwd)/$WS_ANYKERNEL3_NAME.zip" >> $GITHUB_ENV
 
       - name: "📤 Upload final package"
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_PATH }}
+          name: ${{ env.WS_ANYKERNEL3_NAME }}
+          path: AnyKernel3/*
+          compression-level: 9
           retention-days: 7
 
       - name: "📱 Send to Telegram"
         if: always()
         run: |
-          if [[ -f "${{ env.ZIP_PATH }}" ]]; then
-            curl -s -F document=@"${{ env.ZIP_PATH }}" \
+          if [[ -f "${{ env.WS_ANYKERNEL3_ZIP_PATH }}" ]]; then
+            curl -s -F document=@"${{ env.WS_ANYKERNEL3_ZIP_PATH }}" \
                  -F caption="✅ Kernel Build Complete - $(date '+%Y-%m-%d %H:%M:%S')" \
                  -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
                  "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
