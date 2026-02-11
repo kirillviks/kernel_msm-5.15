@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
 
 env:
-  WS_WORK_DIR: ${{ github.workspace }}
   WS_KERNEL_SOURCE: https://github.com/topnotchfreaks/kernel_msm-5.15
   WS_KERNEL_SOURCE_BRANCH: zepharo-new
   WS_KERNEL_LOCALVERSION: ZepharoKV
@@ -16,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        variant: [ksu, noksu]
+        variant: [noksu, ksu]
 
     steps:
       - name: "✨ Setup workspace"
@@ -34,12 +33,10 @@ jobs:
           sudo sysctl -p
 
       - name: "🌟 Clone kernel source"
-        working-directory: ${{ env.WS_WORK_DIR }}
         run: |
           git clone ${{ env.WS_KERNEL_SOURCE }} ${{ env.WS_KERNEL_LOCALVERSION }} --recursive --branch ${{ env.WS_KERNEL_SOURCE_BRANCH }} --depth=1
 
       - name: "📥 Initialize repo"
-        working-directory: ${{ env.WS_WORK_DIR }}
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
           repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
@@ -189,12 +186,10 @@ jobs:
           sed -i '/^config LSM$/,/^help$/{ /^[[:space:]]*default/ { /baseband_guard/! s/selinux/selinux,baseband_guard/ } }' security/Kconfig
 
       - name: "🔨 Build kernel"
-        working-directory: ${{ env.WS_WORK_DIR }}
         run: |
           LTO=full BUILD_CONFIG=${{ env.WS_KERNEL_LOCALVERSION }}/build.config.gki.aarch64 DIST_DIR=dist build/build.sh -j$(nproc --all)
 
       - name: "📦 Prepare artifact"
-        working-directory: ${{ env.WS_WORK_DIR }}
         run: |
           mv dist/Image Image.${{ matrix.variant }}
 
@@ -202,7 +197,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant }}
-          path: ${{ env.WS_WORK_DIR }}/Image.${{ matrix.variant }}
+          path: Image.${{ matrix.variant }}
           retention-days: 3
 
   Package-Kernels:
