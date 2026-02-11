@@ -16,20 +16,17 @@ jobs:
     strategy:
       matrix:
         variant: [noksu, ksu]
-
     steps:
       - name: "✨ Setup workspace"
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y repo rsync aria2
 
-      - name: 📐 Setup SWAP
-        run: |
           sudo fallocate -l 8G /tempswapfile
           sudo chmod 600 /tempswapfile
           sudo mkswap /tempswapfile
           sudo swapon /tempswapfile
-          echo "vm.swappiness=60" | sudo tee -a /etc/sysctl.conf
+          echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
           sudo sysctl -p
 
       - name: "🌟 Clone kernel source"
@@ -40,6 +37,9 @@ jobs:
         run: |
           repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
           repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
+
+          rm -rf .repo
+          rm -rf common
 
           aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
           mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
@@ -74,7 +74,7 @@ jobs:
         run: |
           # Set localversion
           if [ -n "${{ env.WS_KERNEL_LOCALVERSION }}" ]; then
-            echo "CONFIG_LOCALVERSION=\"${{ env.WS_KERNEL_LOCALVERSION }}-$(date +'%Y-%m-%d')\"" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
+            echo "CONFIG_LOCALVERSION=\"-${{ env.WS_KERNEL_LOCALVERSION }}-$(date +'%Y-%m-%d')\"" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
             echo "CONFIG_LOCALVERSION_AUTO=n" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
           fi
 
@@ -82,7 +82,7 @@ jobs:
           sed -i '/CONFIG_CC_OPTIMIZE/d' ${{ env.WS_KERNEL_CONFIG_FILE }}
           echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> ${{ env.WS_KERNEL_CONFIG_FILE }}
 
-          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << 'EOF'
+          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << EOF
           CONFIG_KALLSYMS=y
           CONFIG_TMPFS_XATTR=y
           CONFIG_TMPFS_POSIX_ACL=y
@@ -97,7 +97,7 @@ jobs:
           echo "📦 Installing Wild KSU..."
 
           # Install WildKSU with SUSFS
-          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash
 
           echo "✔ Wild KSU installed successfully"
 
@@ -152,7 +152,7 @@ jobs:
           fi
 
           # Add Wild KSU configs with SUSFS
-          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << 'EOF'
+          cat >> ${{ env.WS_KERNEL_CONFIG_FILE }} << EOF
           CONFIG_KSU=y
           CONFIG_KPROBES=y
           CONFIG_HAVE_KPROBES=y
@@ -223,7 +223,7 @@ jobs:
           # Create ZIP
           cd AnyKernel3
           rm -rf .git
-          zip -r9 "../$WS_ANYKERNEL3_NAME.zip" *
+          zip -r9 ../$WS_ANYKERNEL3_NAME.zip *
           cd ..
           echo "WS_ANYKERNEL3_ZIP_PATH=$(pwd)/$WS_ANYKERNEL3_NAME.zip" >> $GITHUB_ENV
 
@@ -240,7 +240,7 @@ jobs:
         run: |
           if [[ -f "${{ env.WS_ANYKERNEL3_ZIP_PATH }}" ]]; then
             curl -s -F document=@"${{ env.WS_ANYKERNEL3_ZIP_PATH }}" \
-                 -F caption="✅ Kernel Build Complete - $(date '+%Y-%m-%d %H:%M:%S')" \
+                 -F caption="✅ Kernel Build Complete - $(date +'%T %d.%m.%Y %Z')" \
                  -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
                  "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
           else
