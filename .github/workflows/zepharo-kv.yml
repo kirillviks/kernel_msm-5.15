@@ -231,13 +231,13 @@ jobs:
         run: |
           LTO=full \
           BUILD_CONFIG=${{ env.WS_KERNEL_DIR }}/${{ env.WS_KERNEL_NAME }}/build.config.gki.aarch64 \
-          OUT_DIR=out \
+          DIST_DIR=dist \
           build/build.sh -j$(nproc --all)
 
       - name: "📦 Prepare artifact"
         working-directory: ${{ env.WS_WORK_DIR }}
         run: |
-          mv out/dist/Image Image.${{ matrix.variant }}
+          mv dist/Image Image.${{ matrix.variant }}
 
       - name: "📤 Upload artifact"
         uses: actions/upload-artifact@v4
@@ -264,7 +264,7 @@ jobs:
           find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
 
           # Create ZIP
-          ZIP_NAME="AnyKernel3_${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
+          ZIP_NAME="AnyKernel3-${{ github.event.inputs.localVersion }}-$(date +'%Y-%m-%d').zip"
           cd AnyKernel3
           zip -r9 "../$ZIP_NAME" * -x .git/*
           cd ..
