@@ -1,4 +1,4 @@
-name: "Advanced Builder"
+name: "Advanced Build"
 
 env:
   OUT_DIR: "out"
@@ -44,10 +44,10 @@ on:
         default: "250"
         options:
           - "default"
-          - "100"
-          - "250"
-          - "300"
-          - "1000"
+          - "100Hz"
+          - "250Hz"
+          - "300Hz"
+          - "1000Hz"
       optimizationLevel:
         description: "Compiler optimization level"
         required: false
@@ -315,7 +315,7 @@ jobs:
           default)
               echo Nothing to change. Keep Default.
               ;;
-            100)
+            100Hz)
               sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
@@ -324,7 +324,7 @@ jobs:
               echo "CONFIG_HZ=100" >> "$CONFIG_FILE"
               echo "CONFIG_HZ_100=y" >> "$CONFIG_FILE"
               ;;
-            250)
+            250Hz)
               sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
@@ -333,7 +333,7 @@ jobs:
               echo "CONFIG_HZ=250" >> "$CONFIG_FILE"
               echo "CONFIG_HZ_250=y" >> "$CONFIG_FILE"
               ;;
-            300)
+            300Hz)
               sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
@@ -342,7 +342,7 @@ jobs:
               echo "CONFIG_HZ=300" >> "$CONFIG_FILE"
               echo "CONFIG_HZ_300=y" >> "$CONFIG_FILE"
               ;;
-            1000)
+            1000Hz)
               sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
               sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
@@ -543,6 +543,7 @@ jobs:
           KSU_TEXT=""
          if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
           KSU_TEXT="
+          
          🔐 *KSU Variant:* \`${{ github.event.inputs.ksuVariant }}\`"
          fi
       
@@ -581,7 +582,7 @@ jobs:
          • Device: \`Redmi Note 12/13 4G. Pad SE\`
     
          ⚙️ *Configuration:*
-         • LTO: \`${{ github.event.inputs.LTOoptimization }}\`
+         • LTO: \`${{ github.event.inputs.LTOoptimizations }}\`
          • Optimization: \`-${{ github.event.inputs.optimizationLevel }}\`
          • Tick Rate: \`${{ github.event.inputs.tickRate }}Hz\`
          • Build Type: \`${{ github.event.inputs.buildKSU }}\`${KSU_TEXT}
