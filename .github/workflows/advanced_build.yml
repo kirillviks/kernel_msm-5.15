@@ -1,0 +1,601 @@
+name: "Advanced Builder"
+
+env:
+  OUT_DIR: "out"
+  KERNEL_VERSION: "5.15"
+  ANDROID_VERSION: "13"
+
+on:
+  workflow_dispatch:
+    inputs:
+      kernelSourceURL:
+        description: "Kernel source URL"
+        required: true
+        type: string
+        default: "https://github.com/topnotchfreaks/kernel_msm-5.15"
+      kernelBranch:
+        description: "Kernel branch"
+        required: false
+        type: string
+        default: "codelinaro"
+      kernelDevice:
+        description: "Device (used for defconfig)"
+        required: true
+        type: string
+        default: "gki"
+      localVersion:
+        description: "Custom localversion name (e.g., -mybuild)"
+        required: false
+        type: string
+        default: ""
+      buildKSU:
+        description: "Build KSU variant?"
+        required: true
+        type: choice
+        default: "both"
+        options:
+          - "noksu"
+          - "ksu"
+          - "both"
+      tickRate:
+        description: "Kernel tick rate (Hz)"
+        required: false
+        type: choice
+        default: "250"
+        options:
+          - "default"
+          - "100"
+          - "250"
+          - "300"
+          - "1000"
+      optimizationLevel:
+        description: "Compiler optimization level"
+        required: false
+        type: choice
+        default: "O2"
+        options:
+          - "O2"
+          - "O3"
+          - "Os"
+      buildToolchains:
+        description: "build tools"
+        required: true
+        type: choice
+        default: "android-tools"
+        options:
+          - "android-tools"
+          - "custom-tools"
+      LTOoptimizations:
+        description: "Choose LTO"
+        required: true
+        type: choice
+        default: "thin"
+        options:
+          - "thin"
+          - "full"
+
+jobs:
+  Build-Kernel:
+    name: "🚀 Build Kernel"
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        variant: ${{ fromJSON(
+          inputs.buildKSU == 'both' && '["noksu", "ksu"]' ||
+          inputs.buildKSU == 'ksu' && '["ksu"]' ||
+          '["noksu"]' ) }}
+    env:
+      kernelDir: common_${{ github.event.inputs.kernelDevice }}
+      kernelName: common
+      DEFCONFIG_NAME: ${{ github.event.inputs.kernelDevice }}_defconfig
+      WORK_DIR: ${{ github.workspace }}
+
+    steps:
+      - name: "✨ Setup workspace"
+        run: |
+          mkdir -p $kernelDir
+          echo "BUILD_TIME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+          sudo apt-get update -qq
+          sudo apt-get install -y repo rsync aria2 build-essential bc curl flex cpio rsync git zip dwarves libelf-dev gcc-aarch64-linux-gnu libssl-dev python3 clang lld llvm llvm-dev
+
+      - name: "🌟 Clone kernel source"
+        working-directory: ./${{ env.kernelDir }}
+        run: |
+          git clone --recursive --branch ${{ github.event.inputs.kernelBranch }} \
+            ${{ github.event.inputs.kernelSourceURL }} ${{ env.kernelName }} --depth=1
+
+      - name: "📥 Initialize repo"
+        if: github.event.inputs.buildToolchains == 'android-tools'
+        working-directory: ${{ env.WORK_DIR}}
+        run: |
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15-lts --depth=1
+          repo sync --optimized-fetch --prune --no-clone-bundle --no-tags -j$(nproc --all)
+          
+          rm -rf .repo
+          rm -rf common
+
+          aria2c -x 16 -s 16 -o prebuilts/clang/host/linux-x86/clang-r547379.tar.gz "https://github.com/topnotchfreaks/clang/releases/download/v1.0.0/clang-r547379.tar.gz"
+          mkdir -p prebuilts/clang/host/linux-x86/clang-r547379
+          tar -xzf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz -C prebuilts/clang/host/linux-x86/clang-r547379
+          rm -rf prebuilts/clang/host/linux-x86/clang-r547379.tar.gz
+
+          rm -rf prebuilts/clang/host/linux-x86/clang-3289846
+          rm -rf prebuilts/clang/host/linux-x86/clang-r450784e
+          rm -rf prebuilts/clang/host/linux-x86/clang-stable
+          
+          sed -i \
+           -e 's/^BRANCH=.*/BRANCH=android13-5.15/' \
+           -e 's/^CLANG_VERSION=.*/CLANG_VERSION=r547379/' \
+           ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.constants
+          
+          sed -i '/^DEFCONFIG=gki_defconfig/d' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
+          sed -i '$a\DEFCONFIG=${{ env.DEFCONFIG_NAME }}' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
+          sed -i '/^POST_DEFCONFIG_CMDS="check_defconfig"/d' ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki
+
+          sed -i \
+           -e '/^KMI_SYMBOL_LIST_STRICT_MODE=/d' \
+           -e '/^TRIM_NONLISTED_KMI=/d' \
+           -e '/^KMI_ENFORCED=/d' \
+           -e '$a\KMI_SYMBOL_LIST_STRICT_MODE=0' \
+           -e '$a\TRIM_NONLISTED_KMI=0' \
+           -e '$a\KMI_ENFORCED=0' \
+           -e '/^MODULES_ORDER=/d' \
+           -e '/^MODULES_LIST=/d' \
+           ${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64
+           
+      - name: "💫 Get Toolchains"
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        run: |
+          set -e  # Exit on errors
+      
+          # Function to fetch latest release tar.gz URL from GitHub
+          get_latest_github_release() {
+            local repo_url="$1"
+            latest_url=$(curl -sL "https://api.github.com/repos/$repo_url/releases/latest" | grep "browser_download_url.*tar.gz" | cut -d '"' -f 4 | head -n 1)
+            
+            if [[ -z "$latest_url" ]]; then
+              echo "❌ Failed to fetch latest release from $repo_url!"
+              exit 1
+            fi
+      
+            printf "%s" "$latest_url"  # Use printf to output only the URL
+          }
+      
+          clang_url=$(get_latest_github_release "greenforce-project/greenforce_clang")
+      
+          echo "✅ Clang URL: $clang_url"
+      
+          # Create clang directory
+          mkdir -p clang
+      
+          # Check if it's an archive or a Git repo
+          if [[ "$clang_url" == *.tar.gz ]]; then
+            echo "🚀 Downloading latest Clang from: $clang_url..."
+            wget --progress=bar:force -O "clang/clang.tar.gz" "$clang_url" || { echo "❌ Failed to download Clang!"; exit 1; }
+      
+            # Extract Clang
+            echo "📦 Extracting Clang..."
+            tar -xf clang/clang.tar.gz -C clang || { echo "❌ Extraction failed!"; exit 1; }
+            rm -f clang/clang.tar.gz
+          else
+            echo "🚀 Cloning Clang from $clang_url..."
+            git clone --recursive --depth=1 "$clang_url" clang || { echo "❌ Cloning failed!"; exit 1; }
+          fi
+      
+          # Find Clang's bin directory
+          if [ -d "clang/bin" ]; then
+            CLANG_PATH="${{ github.workspace }}/clang/bin"
+          else
+            CLANG_PATH=$(find clang -type d -name "bin" | head -n 1)
+            CLANG_PATH="${{ github.workspace }}/${CLANG_PATH}"
+          fi
+      
+          # Ensure Clang binary exists
+          if [ ! -f "$CLANG_PATH/clang" ]; then
+            echo "❌ Clang binary not found in $CLANG_PATH! Build might fail."
+            ls -R clang  # Debugging: Show extracted files
+            exit 1
+          fi
+      
+          echo "✅ Using Clang from $CLANG_PATH"
+          echo "CLANG_PATH=$CLANG_PATH" >> $GITHUB_ENV
+          echo "$CLANG_PATH" >> $GITHUB_PATH  # Ensures path is updated
+      
+          export PATH="$CLANG_PATH:$PATH"
+          export CLANG_TRIPLE="aarch64-linux-gnu-"
+          export CC=clang
+          export AR="llvm-ar"
+          export AS="llvm-as"
+          export NM="llvm-nm"
+          export OBJCOPY="llvm-objcopy"
+          export OBJDUMP="llvm-objdump"
+          export STRIP="llvm-strip"
+      
+          echo "⚙️ Using Clang version:"
+          clang --version || echo "❌ Clang not found in PATH!"
+      
+      - name: 📐 Setup SWAP 8GB
+        if: github.event.inputs.buildToolchains == 'android-tools'
+        uses: pierotofy/set-swap-space@master
+        with:
+            swap-size-gb: 8
+
+      - name: 📐 Setup SWAP 20GB
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        uses: pierotofy/set-swap-space@master
+        with:
+            swap-size-gb: 20
+            
+      - name: 📐 Tune Swap
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        run: |
+            echo "vm.swappiness=80" | sudo tee -a /etc/sysctl.conf
+            sudo sysctl -p
+            
+      - name: "😎 Set args for GKI kernels"
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        id: generate-args
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+            args="-j$(nproc --all)"
+            if [ -n "${{ env.OUT_DIR }}" ]; then
+              mkdir -p $(pwd)/${{ env.OUT_DIR }}
+              args="$args O=$(pwd)/${{ env.OUT_DIR }}"
+            fi
+            args="$args ARCH=arm64 LLVM=1 LTO=thin"
+            args="$args CROSS_COMPILE=aarch64-linux-gnu-"
+            args="$args CLANG_TRIPLE=aarch64-linux-gnu-"
+            args="$args AR=llvm-ar"
+            args="$args CC=clang"
+            echo "args=$args" >> $GITHUB_OUTPUT
+            
+      - name: "📝 Append custom Makefile line"
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          # temporary clang compiler fixup
+          echo 'KBUILD_CFLAGS += -Wno-default-const-init-unsafe' >> Makefile
+          echo 'CFLAGS += -Wno-uninitialized-const-pointer' >> Makefile
+          echo "Custom Makefile line added successfully"
+      
+      - name: "⚙️ Configure kernel"
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+         # Define the config file path
+         CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+    
+         # Remove any existing LTO FULL configuration
+         sed -i '/^CONFIG_LTO_CLANG_FULL/d' "$CONFIG_FILE"
+    
+         # Set localversion
+         if [ -n "${{ github.event.inputs.localVersion }}" ]; then
+          echo "CONFIG_LOCALVERSION=\"${{ github.event.inputs.localVersion }}\"" >> "$CONFIG_FILE"
+         fi
+    
+         # LTO Configuration - Enable Thin LTO only
+         echo "CONFIG_LTO_CLANG=y" >> "$CONFIG_FILE"
+         echo "# CONFIG_LTO_CLANG_FULL is not set" >> "$CONFIG_FILE"
+         echo "CONFIG_LTO_CLANG_THIN=y" >> "$CONFIG_FILE"
+         echo "CONFIG_THINLTO=y" >> "$CONFIG_FILE"
+
+         # Full Metamodule Support
+         cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KALLSYMS=y
+          CONFIG_TMPFS_XATTR=y
+          CONFIG_TMPFS_POSIX_ACL=y
+          CONFIG_OVERLAY_FS=y
+          EOF
+          
+         # Remove existing optimization configs
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3/d' "$CONFIG_FILE"
+          sed -i '/CONFIG_CC_OPTIMIZE_FOR_SIZE/d' "$CONFIG_FILE"
+          
+          # Apply selected optimization level
+          case "${{ github.event.inputs.optimizationLevel }}" in
+            O2)
+              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE=y" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
+              ;;
+            O3)
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
+              echo "CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3=y" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_SIZE is not set" >> "$CONFIG_FILE"
+              ;;
+            Os)
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE is not set" >> "$CONFIG_FILE"
+              echo "# CONFIG_CC_OPTIMIZE_FOR_PERFORMANCE_O3 is not set" >> "$CONFIG_FILE"
+              echo "CONFIG_CC_OPTIMIZE_FOR_SIZE=y" >> "$CONFIG_FILE"
+              ;;
+          esac
+                   
+          # Apply selected tick rate
+          case "${{ github.event.inputs.tickRate }}" in
+          default)
+              echo Nothing to change. Keep Default.
+              ;;
+            100)
+              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=100" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_100=y" >> "$CONFIG_FILE"
+              ;;
+            250)
+              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=250" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_250=y" >> "$CONFIG_FILE"
+              ;;
+            300)
+              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=300" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_300=y" >> "$CONFIG_FILE"
+              ;;
+            1000)
+              sed -i '/^CONFIG_HZ_100=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_250=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_300=/d' "$CONFIG_FILE"
+              sed -i '/^CONFIG_HZ_1000=/d' "$CONFIG_FILE"
+              echo "CONFIG_NO_HZ_IDLE=y" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ=1000" >> "$CONFIG_FILE"
+              echo "CONFIG_HZ_1000=y" >> "$CONFIG_FILE"
+              ;;
+          esac
+
+         # Sign Builds
+          curl -L -o sign.patch "https://raw.githubusercontent.com/topnotchfreaks/kernel_patches/main/0001-scripts-sign-builds.patch" 
+          patch -p1 < sign.patch || echo "Warning: Strings patch failed"
+          
+      - name: "🔧 Setup Wild KSU with SUSFS"
+        if: matrix.variant == 'ksu'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        run: |
+          rm -rf ./KernelSU ./drivers/kernelsu
+          
+          echo "📦 Installing Wild KSU..."
+
+          # Install WildKSU with SUSFS
+          curl -LSs "https://raw.githubusercontent.com/WildKernels/Wild_KSU/wild/kernel/setup.sh" | bash -s stable
+      
+          echo "✔ Wild KSU installed successfully"
+          
+          # Clone SUSFS4KSU for kernel patches only (not KSU integration)
+          echo "📦 Cloning SUSFS4KSU for kernel patches..."
+          git clone --depth=1 https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android13-5.15
+          
+          SUSFS_KERNEL_PATCH="susfs4ksu/kernel_patches/50_add_susfs_in_gki-android13-5.15.patch"
+          
+          echo "🔧 Applying SUSFS kernel patch..."
+          if patch -p1 < "$SUSFS_KERNEL_PATCH"; then
+            echo "✅ SUSFS patch successfully applied"
+          else
+            echo "⚠️ SUSFS patch failed — copying files manually"
+          fi
+
+          echo "🔧 Applying SUSFS -> KernelSU patch..."
+          KSU_PATCH="susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch"
+          
+          echo "📄 Forcing SUSFS source injection..."
+          
+          # Always replace fs/susfs.c
+          mkdir -p fs
+          cp -f susfs4ksu/kernel_patches/fs/susfs.c fs/susfs.c
+          echo "✔ Copied fs/susfs.c"
+          
+          # Always replace include/linux/susfs.h
+          mkdir -p include/linux
+          cp -f susfs4ksu/kernel_patches/include/linux/susfs.h include/linux/susfs.h
+          echo "✔ Copied include/linux/susfs.h"
+          
+          # Also install missing susfs_def.h
+          if [ -f susfs4ksu/kernel_patches/include/linux/susfs_def.h ]; then
+            cp -f susfs4ksu/kernel_patches/include/linux/susfs_def.h include/linux/susfs_def.h
+            echo "✔ Copied include/linux/susfs_def.h"
+          else
+            echo "⚠️ susfs_def.h not found in repo"
+          fi
+          
+          echo "🔍 Verifying SUSFS files..."
+          for f in fs/susfs.c include/linux/susfs.h include/linux/susfs_def.h; do
+            if [ -f "$f" ]; then echo "✔ Found: $f"; else echo "❌ Missing: $f"; fi
+          done
+          
+          # Clean up SUSFS repo (we only needed kernel patches, not KSU integration)
+          rm -rf susfs4ksu
+          
+          # Create symbolic link for drivers/kernelsu (if needed by build system)
+          if [ ! -L "drivers/kernelsu" ]; then
+            ln -sf ../KernelSU drivers/kernelsu
+            echo "✔ Created drivers/kernelsu symlink"
+          fi
+          
+          # Add Wild KSU configs with SUSFS
+          CONFIG_FILE="arch/arm64/configs/${{ env.DEFCONFIG_NAME }}"
+          cat >> "$CONFIG_FILE" << 'EOF'
+          CONFIG_KSU=y
+          CONFIG_KPROBES=y
+          CONFIG_HAVE_KPROBES=y
+          CONFIG_KPROBE_EVENTS=y
+          CONFIG_KSU_SUSFS=y
+          CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_PATH=y
+          CONFIG_KSU_SUSFS_SUS_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_KSU_DEFAULT_MOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_SUS_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SUS_KSTAT=y
+          CONFIG_KSU_SUSFS_TRY_UMOUNT=y
+          CONFIG_KSU_SUSFS_AUTO_ADD_TRY_UMOUNT_FOR_BIND_MOUNT=y
+          CONFIG_KSU_SUSFS_SPOOF_UNAME=y
+          CONFIG_KSU_SUSFS_ENABLE_LOG=y
+          CONFIG_KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS=y
+          CONFIG_KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG=y
+          CONFIG_KSU_SUSFS_OPEN_REDIRECT=y
+          CONFIG_KSU_SUSFS_SUS_SU=y
+          EOF
+          
+          echo "🎉 Wild KSU with SUSFS kernel patches fully integrated!"
+
+      - name: "🔨 Build kernel"
+        if: github.event.inputs.buildToolchains == 'android-tools'
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+          if [ "${{ github.event.inputs.LTOoptimizations }}" = "thin" ]; then
+           LTO=thin BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 build/build.sh -j$(nproc --all)
+          else
+           LTO=full BUILD_CONFIG=${{ env.kernelDir }}/${{ env.kernelName }}/build.config.gki.aarch64 build/build.sh -j$(nproc --all)
+          fi
+          
+      - name: "👍 Make defconfig"
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        env:
+          args: ${{ steps.generate-args.outputs.args }}
+        run: |
+          make ${{ env.args }} ${{ env.DEFCONFIG_NAME }}
+
+      - name: "🎶 Build kernel"
+        if: github.event.inputs.buildToolchains == 'custom-tools'
+        working-directory: ./${{ env.kernelDir }}/${{ env.kernelName }}
+        env:
+          args: ${{ steps.generate-args.outputs.args }}
+        run: |
+          export KBUILD_BUILD_USER="belowzeroiq"
+          export KBUILD_BUILD_HOST="GitHub"
+        
+          make ${args} \
+            LLVM=1 \
+            LTO=thin \
+            CC=clang \
+            AR=llvm-ar \
+            NM=llvm-nm \
+            OBJCOPY=llvm-objcopy \
+            STRIP=llvm-strip \
+            -j8
+          
+      - name: 📦 Prepare artifact
+        working-directory: ${{ env.WORK_DIR }}
+        run: |
+         mkdir -p out/dist
+
+         if [ "${{ github.event.inputs.buildToolchains }}" = "android-tools" ]; then
+          src="out/dist/Image"
+         else
+          src="${{ env.kernelDir }}/${{ env.kernelName }}/out/arch/arm64/boot/Image"
+         fi
+
+         cp "${src}" "out/dist/Image.${{ matrix.variant }}"
+    
+      - name: "📤 Upload kernel"
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-${{ matrix.variant }}
+          path: ${{ env.WORK_DIR }}/out/dist/Image.${{ matrix.variant }}
+          retention-days: 3
+
+  Package-Kernels:
+    name: "📦 Package kernels"
+    runs-on: ubuntu-latest
+    needs: Build-Kernel
+    steps:
+      - name: "📥 Download artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          path: ./kernels/
+
+      - name: "📦 Create flashable ZIP"
+        run: |
+          BUILD_TIME=$(date +'%Y-%m-%d')
+          git clone --depth=1 https://github.com/topnotchfreaks/AnyKernel3 -b master AnyKernel3
+          
+          # Copy kernels
+          find kernels -name "Image.*" -exec cp {} AnyKernel3/ \;
+          
+          # Create ZIP
+          ZIP_NAME="Anykernel3_${{ github.event.inputs.kernelBranch }}_${BUILD_TIME}.zip"
+          cd AnyKernel3
+          zip -r9 "../$ZIP_NAME" * -x .git/*
+          cd ..
+          echo "ZIP_PATH=$(pwd)/$ZIP_NAME" >> $GITHUB_ENV
+          echo "ZIP_NAME=$ZIP_NAME" >> $GITHUB_ENV
+
+      - name: "📤 Upload final package"
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_PATH }}
+          retention-days: 1
+
+      - name: "📱 Send to Telegram"
+        if: always()
+        run: |
+         if [[ -f "${{ env.ZIP_PATH }}" ]]; then
+          KSU_TEXT=""
+         if [ "${{ github.event.inputs.buildKSU }}" != "noksu" ]; then
+          KSU_TEXT="
+         🔐 *KSU Variant:* \`${{ github.event.inputs.ksuVariant }}\`"
+         fi
+      
+         CAPTION="✅ *Kernel Build Successful*
+      
+         📦 *Build Information:*
+         • Kernel: \`Linux ${{ env.KERNEL_VERSION }}\`
+         • Android: \`13-16\`
+         • Branch: \`${{ github.event.inputs.kernelBranch }}\`
+         • Device: \`${{ github.event.inputs.kernelDevice }}\`
+    
+         ⚙️ *Configuration:*
+         • LTO: \`${{ github.event.inputs.LTOoptimization }}\`
+         • Optimization: \`-${{ github.event.inputs.optimizationLevel }}\`
+         • Tick Rate: \`${{ github.event.inputs.tickRate }}Hz\`
+         • Build Type: \`${{ github.event.inputs.buildKSU }}\`${KSU_TEXT}
+         • SUSFS: \`Enabled (GKI Android13-5.15)\`
+         • Local Version: \`${{ github.event.inputs.localVersion }}\`
+         • Build Tools: \`${{ github.event.inputs.buildToolchains }}\`
+    
+         🕐 *Build Date:* $(date '+%Y-%m-%d %H:%M:%S UTC')
+         📦 *Package:* \`${{ env.ZIP_NAME }}\`"
+      
+         curl -s -F document=@"${{ env.ZIP_PATH }}" \
+           -F caption="$CAPTION" \
+           -F parse_mode="Markdown" \
+           -F chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+           "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument"
+         else
+         FAILURE_MSG="❌ *Kernel Build Failed*
+      
+         📦 *Build Information:*
+         • Kernel: \`Linux ${{ env.KERNEL_VERSION }}\`
+         • Android: \`13-16\`
+         • Branch: \`${{ github.event.inputs.kernelBranch }}\`
+         • Device: \`Redmi Note 12/13 4G. Pad SE\`
+    
+         ⚙️ *Configuration:*
+         • LTO: \`${{ github.event.inputs.LTOoptimization }}\`
+         • Optimization: \`-${{ github.event.inputs.optimizationLevel }}\`
+         • Tick Rate: \`${{ github.event.inputs.tickRate }}Hz\`
+         • Build Type: \`${{ github.event.inputs.buildKSU }}\`${KSU_TEXT}
+         • SUSFS: \`Enabled (GKI Android13-5.15)\`
+         • Local Version: \`${{ github.event.inputs.localVersion }}\`
+         • Build Tools: \`${{ github.event.inputs.buildToolchains }}\`
+      
+         🕐 *Failed at:* $(date '+%Y-%m-%d %H:%M:%S UTC')
+    
+         🔍 Check the [workflow logs](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}) for details."
+      
+         curl -s -X POST \
+           -d chat_id=${{ secrets.TELEGRAM_USER_ID }} \
+           -d text="$FAILURE_MSG" \
+           -d parse_mode="Markdown" \
+           "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage"
+         fi
