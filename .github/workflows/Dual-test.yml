@@ -353,7 +353,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: kernel-${{ matrix.variant }}
-          path: ${{ env.WORK_DIR }}/Image.${{ matrix.variant }}
+          path: ${{ env.WORK_DIR }}/out/dist/Image.${{ matrix.variant }}
           retention-days: 3
 
   Package-Kernels:
